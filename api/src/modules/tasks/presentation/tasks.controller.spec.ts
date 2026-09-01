@@ -41,6 +41,7 @@ function makeTask(overrides: Partial<TaskWithRelations> = {}): TaskWithRelations
     updatedAt: new Date(),
     artifacts: [],
     generationRuns: [],
+    evaluation: null,
     ...overrides,
   };
 }

@@ -29,6 +29,9 @@ export interface TaskWithRelations extends Task {
     TaskGenerationRun,
     'id' | 'status' | 'model' | 'errorMessage' | 'startedAt' | 'finishedAt'
   >[];
+  // Avaliação assíncrona (LLM-as-Judge): persistida pelo worker DEPOIS que o
+  // stream SSE já encerrou. Fica `null` até a avaliação ser concluída.
+  evaluation: TaskEvaluation | null;
 }
 
 export interface SuccessfulRunInput {
@@ -323,6 +326,9 @@ export class TasksRepository {
           },
           orderBy: { startedAt: 'desc' },
         },
+        // A avaliação é obtida por este GET (não pelo stream): o worker de
+        // avaliação a persiste de forma assíncrona após a geração concluir.
+        evaluation: true,
       },
     });
   }
