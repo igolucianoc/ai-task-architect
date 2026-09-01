@@ -7,6 +7,7 @@ import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { TasksModule } from './tasks/tasks.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { buildThrottlerOptions } from './common/throttler/throttler.config';
 
@@ -25,6 +26,7 @@ import { buildThrottlerOptions } from './common/throttler/throttler.config';
     HealthModule,
     UsersModule,
     AuthModule,
+    TasksModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
