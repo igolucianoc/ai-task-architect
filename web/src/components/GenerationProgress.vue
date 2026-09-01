@@ -1,0 +1,154 @@
+<script setup lang="ts">
+import { computed, type DeepReadonly } from 'vue';
+import type { StreamStatus } from '@/composables/useTaskGenerationStream';
+import type { TaskGenerationEvent, TaskProgressEventName } from '@/services/task-events';
+import AppSpinner from '@/components/AppSpinner.vue';
+
+// Componente de UI: exibe o progresso do streaming como uma linha do tempo.
+// Recebe a lista de eventos e o status do composable (sem acessar dados direto).
+// Usa DeepReadonly para aceitar diretamente os refs readonly do composable.
+const props = defineProps<{
+  // Eventos recebidos, em ordem de chegada (readonly vindo do composable).
+  events: DeepReadonly<TaskGenerationEvent[]>;
+  // Status atual da conexão de streaming.
+  status: StreamStatus;
+}>();
+
+// Passos de progresso, na ordem em que ocorrem, com rótulo pt-BR.
+const STEPS: ReadonlyArray<{ event: TaskProgressEventName; label: string }> = [
+  { event: 'started', label: 'Iniciando' },
+  { event: 'analyzing_context', label: 'Analisando contexto' },
+  { event: 'generating_requirements', label: 'Elaborando requisitos' },
+  { event: 'generating_acceptance_criteria', label: 'Definindo critérios de aceite' },
+  { event: 'evaluating', label: 'Revisando' },
+];
+
+// Mostra o spinner enquanto a conexão está em andamento.
+const isActive = computed(() => props.status === 'connecting' || props.status === 'streaming');
+
+// Nomes de evento de progresso já recebidos (para marcar passos concluídos/atuais).
+const receivedEvents = computed<Set<TaskProgressEventName>>(() => {
+  const received = new Set<TaskProgressEventName>();
+  for (const event of props.events) {
+    if (event.event !== 'completed' && event.event !== 'failed') {
+      received.add(event.event);
+    }
+  }
+  return received;
+});
+
+// Índice do passo atual: o último passo de progresso já recebido.
+const currentStepIndex = computed(() => {
+  let index = -1;
+  STEPS.forEach((step, i) => {
+    if (receivedEvents.value.has(step.event)) {
+      index = i;
+    }
+  });
+  return index;
+});
+
+// Rótulo do passo atual, anunciado por leitores de tela (aria-live).
+const currentStepLabel = computed(() =>
+  currentStepIndex.value >= 0 ? STEPS[currentStepIndex.value].label : 'Conectando',
+);
+
+// Estado visual de cada passo: concluído, atual ou pendente.
+type StepState = 'done' | 'current' | 'pending';
+
+function stepState(index: number): StepState {
+  if (index < currentStepIndex.value) {
+    return 'done';
+  }
+  if (index === currentStepIndex.value) {
+    return 'current';
+  }
+  return 'pending';
+}
+</script>
+
+<template>
+  <div class="generation-progress" role="status">
+    <div class="generation-progress__heading">
+      <AppSpinner v-if="isActive" label="Gerando especificação" />
+      <p class="generation-progress__current" aria-live="polite">{{ currentStepLabel }}</p>
+    </div>
+
+    <ol class="generation-progress__steps">
+      <li
+        v-for="(step, index) in STEPS"
+        :key="step.event"
+        :class="['generation-progress__step', `generation-progress__step--${stepState(index)}`]"
+        :aria-current="stepState(index) === 'current' ? 'step' : undefined"
+      >
+        <span class="generation-progress__marker" aria-hidden="true"></span>
+        <span class="generation-progress__label">{{ step.label }}</span>
+      </li>
+    </ol>
+  </div>
+</template>
+
+<style scoped>
+.generation-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-16);
+}
+
+.generation-progress__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-12);
+  color: var(--color-charcoal);
+}
+
+.generation-progress__current {
+  font-family: var(--font-duolingo-sans);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-charcoal);
+}
+
+.generation-progress__steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-12);
+  list-style: none;
+}
+
+.generation-progress__step {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-12);
+  color: var(--color-pencil-gray);
+}
+
+.generation-progress__marker {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--color-faded-gray);
+  border-radius: 50%;
+  background-color: var(--color-paper-white);
+  flex-shrink: 0;
+}
+
+/* Passo concluído: marcador preenchido de verde (destaque positivo). */
+.generation-progress__step--done .generation-progress__marker {
+  border-color: var(--color-eager-green);
+  background-color: var(--color-eager-green);
+}
+
+.generation-progress__step--done .generation-progress__label {
+  color: var(--color-charcoal);
+}
+
+/* Passo atual: destaque em azul + rótulo em negrito. */
+.generation-progress__step--current .generation-progress__marker {
+  border-color: var(--color-spark-blue);
+}
+
+.generation-progress__step--current .generation-progress__label {
+  color: var(--color-spark-blue);
+  font-weight: var(--font-weight-bold);
+}
+</style>
