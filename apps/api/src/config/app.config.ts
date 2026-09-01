@@ -10,9 +10,12 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32),
   JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(7),
-  HUGGINGFACE_API_TOKEN: z.string().min(1),
-  HUGGINGFACE_MODEL_GENERATION: z.string().default('HuggingFaceH4/zephyr-7b-beta'),
-  HUGGINGFACE_MODEL_EVALUATION: z.string().default('HuggingFaceH4/zephyr-7b-beta'),
+  // Hugging Face é o provider exclusivo de LLM (ver prompts/huggingface-access-token.md).
+  // HF_TOKEN e HF_MODEL são os nomes canônicos definidos naquele documento.
+  HF_TOKEN: z.string().min(1, 'HF_TOKEN é obrigatório'),
+  HF_MODEL: z.string().min(1).default('HuggingFaceH4/zephyr-7b-beta'),
+  // Modelo dedicado à avaliação (Etapa 07); se ausente, usa o mesmo de geração.
+  HF_MODEL_EVALUATION: z.string().min(1).optional(),
 });
 
 export type AppConfig = z.infer<typeof envSchema> & {
@@ -24,9 +27,9 @@ export type AppConfig = z.infer<typeof envSchema> & {
   jwtSecret: string;
   jwtAccessExpiresIn: string;
   refreshTokenTtlDays: number;
-  huggingfaceApiToken: string;
-  huggingfaceModelGeneration: string;
-  huggingfaceModelEvaluation: string;
+  hfToken: string;
+  hfModel: string;
+  hfModelEvaluation: string;
 };
 
 export const appConfig = registerAs('app', (): AppConfig => {
@@ -49,8 +52,8 @@ export const appConfig = registerAs('app', (): AppConfig => {
     jwtSecret: env.JWT_SECRET,
     jwtAccessExpiresIn: env.JWT_ACCESS_EXPIRES_IN,
     refreshTokenTtlDays: env.REFRESH_TOKEN_TTL_DAYS,
-    huggingfaceApiToken: env.HUGGINGFACE_API_TOKEN,
-    huggingfaceModelGeneration: env.HUGGINGFACE_MODEL_GENERATION,
-    huggingfaceModelEvaluation: env.HUGGINGFACE_MODEL_EVALUATION,
+    hfToken: env.HF_TOKEN,
+    hfModel: env.HF_MODEL,
+    hfModelEvaluation: env.HF_MODEL_EVALUATION ?? env.HF_MODEL,
   };
 });

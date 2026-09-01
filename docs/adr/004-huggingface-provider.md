@@ -30,12 +30,14 @@ Inference API, com token de acesso lido de variável de ambiente.
 ## Configuração esperada
 
 ```env
-HUGGINGFACE_API_TOKEN=hf_...
-HUGGINGFACE_MODEL_GENERATION=HuggingFaceH4/zephyr-7b-beta
-HUGGINGFACE_MODEL_EVALUATION=HuggingFaceH4/zephyr-7b-beta
+HF_TOKEN=hf_...
+HF_MODEL=HuggingFaceH4/zephyr-7b-beta
+# opcional; se ausente, usa HF_MODEL
+HF_MODEL_EVALUATION=HuggingFaceH4/zephyr-7b-beta
 ```
 
-Modelos podem ser diferentes para geração e avaliação, configuráveis via `.env`.
+Os nomes de variáveis seguem `prompts/huggingface-access-token.md` (fonte de verdade): `HF_TOKEN`
+e `HF_MODEL`. Um modelo dedicado à avaliação é opcional via `HF_MODEL_EVALUATION`.
 
 ## Alternativas consideradas
 
@@ -51,6 +53,6 @@ Modelos podem ser diferentes para geração e avaliação, configuráveis via `.
 - `LlmService` encapsula toda comunicação com o HF. Nenhum outro módulo importa o SDK diretamente.
 - Respostas do HF podem ter latência variável (modelos grandes em cold start). O sistema deve
   comunicar isso claramente via SSE e ter timeout configurável.
-- Token de acesso é lido exclusivamente de `process.env.HUGGINGFACE_API_TOKEN` — nunca hardcoded.
+- Token de acesso é lido exclusivamente de `process.env.HF_TOKEN` na camada de config — nunca hardcoded.
 - Modelos free tier têm rate limits; o sistema deve tratar erros 429 com mensagem descritiva.
 - Ver `prompts/huggingface-access-token.md` para regras adicionais sobre o token.
