@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
+import { registerAuthGuard } from './guards';
 
 const routes: RouteRecordRaw[] = [
   {
@@ -35,3 +36,6 @@ export const router = createRouter({
   history: createWebHistory(),
   routes,
 });
+
+// Guard de autenticação: bootstrap único + requiresAuth/requiresGuest.
+registerAuthGuard(router);
