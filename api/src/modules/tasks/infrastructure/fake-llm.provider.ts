@@ -2,6 +2,7 @@ import {
   LlmProvider,
   LlmGenerationRequest,
   LlmGenerationResult,
+  LlmMessage,
   LlmProviderError,
 } from '../application/llm-provider.port';
 
@@ -9,19 +10,30 @@ import {
  * Implementação de LlmProvider para testes e desenvolvimento offline.
  * Não faz nenhuma chamada de rede. Permite configurar a resposta, simular
  * falha e inspecionar as requisições recebidas.
+ *
+ * No fluxo real, um único FakeLlmProvider é compartilhado (via factory) tanto
+ * para GERAÇÃO quanto para AVALIAÇÃO (LLM-as-Judge). Por isso, quando NENHUMA
+ * resposta explícita é definida, o Fake inspeciona o prompt e responde conforme
+ * o tipo (spec de geração vs. resposta de juiz). Um override explícito
+ * (construtor com argumento ou `setResponse`) sempre tem prioridade.
  */
 export class FakeLlmProvider implements LlmProvider {
+  /** Resposta a retornar quando definida explicitamente pelo usuário. */
   private response: string;
+  /** Indica se `response` foi definido explicitamente (override), não default. */
+  private hasExplicitResponse: boolean;
   private shouldFail = false;
   private failureMessage = 'falha simulada do provider';
   readonly receivedRequests: LlmGenerationRequest[] = [];
 
   constructor(response?: string) {
+    this.hasExplicitResponse = response !== undefined;
     this.response = response ?? FakeLlmProvider.defaultSpecJson();
   }
 
   setResponse(response: string): void {
     this.response = response;
+    this.hasExplicitResponse = true;
   }
 
   simulateFailure(message?: string): void {
@@ -39,10 +51,41 @@ export class FakeLlmProvider implements LlmProvider {
     }
 
     return Promise.resolve({
-      content: this.response,
+      content: this.resolveContent(request),
       model: 'fake-model',
       usage: { promptTokens: 100, completionTokens: 200, totalTokens: 300 },
       latencyMs: 5,
+    });
+  }
+
+  /**
+   * Decide o conteúdo da resposta. Com override explícito, retorna-o tal qual;
+   * caso contrário (modo default), infere o tipo de prompt para responder com
+   * uma spec de geração ou uma resposta de juiz.
+   */
+  private resolveContent(request: LlmGenerationRequest): string {
+    if (this.hasExplicitResponse) {
+      return this.response;
+    }
+
+    return FakeLlmProvider.looksLikeJudgePrompt(request.messages)
+      ? FakeLlmProvider.defaultJudgeJson()
+      : FakeLlmProvider.defaultSpecJson();
+  }
+
+  /**
+   * Heurística para distinguir um prompt de AVALIAÇÃO (LLM-as-Judge) de um de
+   * GERAÇÃO. O prompt do juiz pede um JSON com `"scores"` e `"rationale"` e cita
+   * o critério `requirementsAdherence`; o de geração pede a especificação e não
+   * menciona nada disso.
+   */
+  private static looksLikeJudgePrompt(messages: LlmMessage[]): boolean {
+    return messages.some((message) => {
+      const content = message.content;
+      return (
+        (content.includes('scores') && content.includes('rationale')) ||
+        content.includes('requirementsAdherence')
+      );
     });
   }
 

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { FakeLlmProvider } from './fake-llm.provider';
 import { LlmProviderError } from '../application/llm-provider.port';
 import { parseTaskSpecification } from '../application/task-specification';
+import { parseJudgeResponse } from '../application/task-evaluation';
 
 describe('FakeLlmProvider', () => {
   it('retorna por padrão uma especificação JSON válida e parseável', async () => {
@@ -13,6 +14,39 @@ describe('FakeLlmProvider', () => {
 
     expect(result.model).toBe('fake-model');
     expect(result.usage?.totalTokens).toBe(300);
+    const parsed = parseTaskSpecification(result.content);
+    expect(parsed.success).toBe(true);
+  });
+
+  it('em modo default, responde como juiz quando o prompt parece de avaliação', async () => {
+    const provider = new FakeLlmProvider();
+
+    const result = await provider.generate({
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Avalie a especificação e responda em JSON com "scores" e "rationale". ' +
+            'Inclua o critério requirementsAdherence.',
+        },
+        { role: 'user', content: 'especificação a avaliar' },
+      ],
+    });
+
+    const parsed = parseJudgeResponse(result.content);
+    expect(parsed.success).toBe(true);
+  });
+
+  it('em modo default, responde como especificação quando o prompt parece de geração', async () => {
+    const provider = new FakeLlmProvider();
+
+    const result = await provider.generate({
+      messages: [
+        { role: 'system', content: 'Gere uma especificação técnica com título, contexto...' },
+        { role: 'user', content: 'preciso de uma tela de login' },
+      ],
+    });
+
     const parsed = parseTaskSpecification(result.content);
     expect(parsed.success).toBe(true);
   });
