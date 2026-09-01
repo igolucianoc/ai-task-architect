@@ -61,4 +61,27 @@ export class FakeLlmProvider implements LlmProvider {
       definitionOfDone: ['DoD de exemplo'],
     });
   }
+
+  /**
+   * Um JSON de resposta do juiz válido (scores altos coerentes + rationale),
+   * útil como resposta padrão nos testes do LLM-as-Judge. Aceita overrides
+   * parciais de scores. A porta é a mesma (LlmProvider), então o FakeLlmProvider
+   * é reutilizado tanto para geração quanto para avaliação.
+   */
+  static defaultJudgeJson(scoreOverrides?: Partial<Record<string, number>>): string {
+    const scores: Record<string, number> = {
+      clarity: 9,
+      completeness: 8,
+      consistency: 9,
+      testability: 8,
+      risks: 8,
+      requirementsAdherence: 9,
+      ...scoreOverrides,
+    };
+
+    return JSON.stringify({
+      scores,
+      rationale: 'Especificação clara, completa e aderente à necessidade original.',
+    });
+  }
 }
