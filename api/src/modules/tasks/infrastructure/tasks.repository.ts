@@ -38,8 +38,37 @@ export class TasksRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
+   * Cria a Task apenas com status PENDING, sem run associada. Usado no fluxo
+   * B1: `POST /tasks` cria a tarefa e a geração é disparada depois pelo stream.
+   */
+  createPendingTask(userId: string, description: string): Promise<Task> {
+    return this.prisma.task.create({
+      data: { userId, description, status: TaskStatus.PENDING },
+    });
+  }
+
+  /**
+   * Inicia uma run (RUNNING) para uma Task já existente e coloca a Task em
+   * STREAMING atomicamente. Retorna a run recém-criada. Usado pelo stream SSE
+   * ao disparar a geração de uma tarefa PENDING.
+   */
+  startRun(taskId: string, model: string): Promise<TaskGenerationRun> {
+    return this.prisma.$transaction(async (tx) => {
+      const run = await tx.taskGenerationRun.create({
+        data: { taskId, model, status: GenerationRunStatus.RUNNING },
+      });
+      await tx.task.update({
+        where: { id: taskId },
+        data: { status: TaskStatus.STREAMING },
+      });
+      return run;
+    });
+  }
+
+  /**
    * Cria a Task (status STREAMING) e a run inicial (RUNNING) atomicamente.
-   * Retorna a task e a run recém-criadas.
+   * Retorna a task e a run recém-criadas. Mantido para compatibilidade; o fluxo
+   * B1 usa `createPendingTask` + `startRun` separadamente.
    */
   async createTaskWithRun(
     userId: string,

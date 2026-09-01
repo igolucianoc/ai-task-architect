@@ -3,18 +3,10 @@ import { GenerateTaskSpecificationUseCase } from './generate-task-specification.
 import { FakeLlmProvider } from '../infrastructure/fake-llm.provider';
 import { TasksRepository } from '../infrastructure/tasks.repository';
 import { type TaskGenerationEvent } from './task-generation-events';
-import { Task, TaskGenerationRun } from '@prisma/client';
+import { TaskGenerationRun } from '@prisma/client';
 
-function makeTaskAndRun(): { task: Task; run: TaskGenerationRun } {
-  const task = {
-    id: 'task-1',
-    userId: 'user-1',
-    description: 'necessidade',
-    status: 'STREAMING',
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  } as Task;
-  const run = {
+function makeRun(): TaskGenerationRun {
+  return {
     id: 'run-1',
     taskId: 'task-1',
     status: 'RUNNING',
@@ -22,14 +14,13 @@ function makeTaskAndRun(): { task: Task; run: TaskGenerationRun } {
     errorMessage: null,
     startedAt: new Date(),
     finishedAt: null,
-  } as TaskGenerationRun;
-  return { task, run };
+  };
 }
 
 describe('GenerateTaskSpecificationUseCase', () => {
   let provider: FakeLlmProvider;
   let repository: {
-    createTaskWithRun: ReturnType<typeof vi.fn>;
+    startRun: ReturnType<typeof vi.fn>;
     completeRun: ReturnType<typeof vi.fn>;
     failRun: ReturnType<typeof vi.fn>;
   };
@@ -38,7 +29,7 @@ describe('GenerateTaskSpecificationUseCase', () => {
   beforeEach(() => {
     provider = new FakeLlmProvider();
     repository = {
-      createTaskWithRun: vi.fn().mockResolvedValue(makeTaskAndRun()),
+      startRun: vi.fn().mockResolvedValue(makeRun()),
       completeRun: vi.fn().mockResolvedValue(undefined),
       failRun: vi.fn().mockResolvedValue(undefined),
     };
@@ -49,7 +40,11 @@ describe('GenerateTaskSpecificationUseCase', () => {
   });
 
   it('gera, valida e persiste a especificação no fluxo de sucesso', async () => {
-    const result = await useCase.execute({ userId: 'user-1', description: 'necessidade' });
+    const result = await useCase.execute({
+      taskId: 'task-1',
+      userId: 'user-1',
+      description: 'necessidade',
+    });
 
     expect(result.status).toBe('completed');
     expect(repository.completeRun).toHaveBeenCalledOnce();
@@ -60,7 +55,7 @@ describe('GenerateTaskSpecificationUseCase', () => {
   });
 
   it('passa a necessidade do usuário ao provider via mensagens', async () => {
-    await useCase.execute({ userId: 'user-1', description: 'adicionar 2FA' });
+    await useCase.execute({ taskId: 'task-1', userId: 'user-1', description: 'adicionar 2FA' });
 
     expect(provider.receivedRequests).toHaveLength(1);
     const userMsg = provider.receivedRequests[0].messages.find((m) => m.role === 'user');
@@ -70,7 +65,7 @@ describe('GenerateTaskSpecificationUseCase', () => {
   it('marca a run como falha quando o provider lança erro (sem persistir artefato)', async () => {
     provider.simulateFailure('provider indisponível');
 
-    const result = await useCase.execute({ userId: 'user-1', description: 'x' });
+    const result = await useCase.execute({ taskId: 'task-1', userId: 'user-1', description: 'x' });
 
     expect(result.status).toBe('failed');
     expect(repository.failRun).toHaveBeenCalledOnce();
@@ -83,25 +78,25 @@ describe('GenerateTaskSpecificationUseCase', () => {
   it('marca a run como falha quando a saída do modelo é inválida (não confia no JSON)', async () => {
     provider.setResponse('desculpe, não consegui gerar');
 
-    const result = await useCase.execute({ userId: 'user-1', description: 'x' });
+    const result = await useCase.execute({ taskId: 'task-1', userId: 'user-1', description: 'x' });
 
     expect(result.status).toBe('failed');
     expect(repository.failRun).toHaveBeenCalledOnce();
     expect(repository.completeRun).not.toHaveBeenCalled();
   });
 
-  it('cria a task+run antes de chamar o provider', async () => {
-    await useCase.execute({ userId: 'user-1', description: 'x' });
+  it('inicia a run para a task existente antes de chamar o provider', async () => {
+    await useCase.execute({ taskId: 'task-1', userId: 'user-1', description: 'x' });
 
-    expect(repository.createTaskWithRun).toHaveBeenCalledOnce();
-    expect(repository.createTaskWithRun).toHaveBeenCalledWith('user-1', 'x', expect.any(String));
+    expect(repository.startRun).toHaveBeenCalledOnce();
+    expect(repository.startRun).toHaveBeenCalledWith('task-1', expect.any(String));
   });
 
   it('emite os eventos de progresso na ordem esperada e finaliza com completed', async () => {
     const events: TaskGenerationEvent[] = [];
 
     const result = await useCase.execute(
-      { userId: 'user-1', description: 'necessidade' },
+      { taskId: 'task-1', userId: 'user-1', description: 'necessidade' },
       (event) => events.push(event),
     );
 
@@ -129,8 +124,9 @@ describe('GenerateTaskSpecificationUseCase', () => {
     provider.simulateFailure('provider indisponível');
     const events: TaskGenerationEvent[] = [];
 
-    const result = await useCase.execute({ userId: 'user-1', description: 'x' }, (event) =>
-      events.push(event),
+    const result = await useCase.execute(
+      { taskId: 'task-1', userId: 'user-1', description: 'x' },
+      (event) => events.push(event),
     );
 
     expect(result.status).toBe('failed');
@@ -147,8 +143,9 @@ describe('GenerateTaskSpecificationUseCase', () => {
     provider.setResponse('desculpe, não consegui gerar');
     const events: TaskGenerationEvent[] = [];
 
-    const result = await useCase.execute({ userId: 'user-1', description: 'x' }, (event) =>
-      events.push(event),
+    const result = await useCase.execute(
+      { taskId: 'task-1', userId: 'user-1', description: 'x' },
+      (event) => events.push(event),
     );
 
     expect(result.status).toBe('failed');
@@ -156,16 +153,23 @@ describe('GenerateTaskSpecificationUseCase', () => {
   });
 
   it('mantém o comportamento atual quando execute é chamado sem onEvent', async () => {
-    const result = await useCase.execute({ userId: 'user-1', description: 'necessidade' });
+    const result = await useCase.execute({
+      taskId: 'task-1',
+      userId: 'user-1',
+      description: 'necessidade',
+    });
 
     expect(result.status).toBe('completed');
     expect(repository.completeRun).toHaveBeenCalledOnce();
   });
 
   it('não derruba a geração quando o listener lança exceção', async () => {
-    const result = await useCase.execute({ userId: 'user-1', description: 'necessidade' }, () => {
-      throw new Error('falha no consumidor de eventos');
-    });
+    const result = await useCase.execute(
+      { taskId: 'task-1', userId: 'user-1', description: 'necessidade' },
+      () => {
+        throw new Error('falha no consumidor de eventos');
+      },
+    );
 
     expect(result.status).toBe('completed');
     expect(repository.completeRun).toHaveBeenCalledOnce();

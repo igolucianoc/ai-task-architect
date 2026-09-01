@@ -1,5 +1,6 @@
 import { Module, Logger } from '@nestjs/common';
 import { ConfigType } from '@nestjs/config';
+import { JwtModule } from '@nestjs/jwt';
 import { appConfig } from '../../config/app.config';
 import { LLM_PROVIDER, LlmProvider } from './application/llm-provider.port';
 import { HuggingFaceProvider } from './infrastructure/huggingface.provider';
@@ -34,6 +35,9 @@ export function llmProviderFactory(config: ConfigType<typeof appConfig>): LlmPro
 }
 
 @Module({
+  // JwtModule disponibiliza o JwtService usado pelo controller para validar o
+  // token na rota SSE (autenticação manual via query string — ver ADR-005).
+  imports: [JwtModule.register({})],
   controllers: [TasksController],
   providers: [
     TasksRepository,

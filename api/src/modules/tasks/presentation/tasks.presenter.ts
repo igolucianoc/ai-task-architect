@@ -10,6 +10,19 @@ export interface TaskSummaryView {
   updatedAt: string;
 }
 
+/**
+ * Resposta de `POST /tasks` no fluxo B1: a tarefa é apenas criada (PENDING) e a
+ * geração é disparada depois via `GET /tasks/:id/stream`.
+ */
+export interface TaskCreatedView {
+  taskId: string;
+  status: string;
+}
+
+export function toTaskCreated(task: Task): TaskCreatedView {
+  return { taskId: task.id, status: task.status };
+}
+
 export interface TaskDetailView extends TaskSummaryView {
   specification: TaskSpecification | null;
   lastRun: {
@@ -53,8 +66,10 @@ export function toTaskDetail(task: TaskWithRelations): TaskDetailView {
 /**
  * O artifact foi persistido como JSON já validado. Ainda assim, fazemos parse
  * defensivo: se algo estiver corrompido, retornamos null em vez de quebrar.
+ * Exportado para reidratar a especificação no stream SSE quando a tarefa já
+ * está COMPLETED.
  */
-function parseArtifactContent(content: string): TaskSpecification | null {
+export function parseArtifactContent(content: string): TaskSpecification | null {
   try {
     return JSON.parse(content) as TaskSpecification;
   } catch {

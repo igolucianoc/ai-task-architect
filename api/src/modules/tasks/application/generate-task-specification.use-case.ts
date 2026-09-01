@@ -10,6 +10,7 @@ import {
 } from './task-generation-events';
 
 export interface GenerateTaskInput {
+  taskId: string;
   userId: string;
   description: string;
 }
@@ -34,16 +35,15 @@ export class GenerateTaskSpecificationUseCase {
     input: GenerateTaskInput,
     onEvent?: TaskGenerationEventListener,
   ): Promise<GenerateTaskResult> {
-    const { task, run } = await this.repository.createTaskWithRun(
-      input.userId,
-      input.description,
-      this.modelHint(),
-    );
+    // A Task já existe (criada em `POST /tasks`). Aqui apenas iniciamos a run e
+    // colocamos a Task em STREAMING.
+    const taskId = input.taskId;
+    const run = await this.repository.startRun(taskId, this.modelHint());
 
     // `run.id` correlaciona todos os eventos de uma mesma geração.
     const runId = run.id;
 
-    // Progresso: geração iniciada (task+run já persistidas).
+    // Progresso: geração iniciada (run já persistida, Task em STREAMING).
     this.emit(onEvent, buildEvent({ event: 'started', runId }));
 
     try {
@@ -59,7 +59,7 @@ export class GenerateTaskSpecificationUseCase {
       // Observabilidade: nunca logar prompt/conteúdo/token; só metadados.
       const totalTokens = result.usage ? String(result.usage.totalTokens) : 'n/d';
       this.logger.log(
-        `geração taskId=${task.id} model=${result.model} ` +
+        `geração taskId=${taskId} model=${result.model} ` +
           `tokens=${totalTokens} latencyMs=${String(result.latencyMs)}`,
       );
 
@@ -89,21 +89,18 @@ export class GenerateTaskSpecificationUseCase {
       const parsed = parseTaskSpecification(result.content);
       if (!parsed.success) {
         // Saída do modelo não confiável: não persistir artefato inválido.
-        this.logger.warn(`geração taskId=${task.id} rejeitada: ${parsed.error}`);
+        this.logger.warn(`geração taskId=${taskId} rejeitada: ${parsed.error}`);
         await this.repository.failRun({
-          taskId: task.id,
+          taskId,
           runId,
           errorMessage: `Resposta do modelo inválida: ${parsed.error}`,
         });
-        this.emit(
-          onEvent,
-          buildEvent({ event: 'failed', runId, taskId: task.id, error: parsed.error }),
-        );
-        return { status: 'failed', taskId: task.id, error: parsed.error };
+        this.emit(onEvent, buildEvent({ event: 'failed', runId, taskId, error: parsed.error }));
+        return { status: 'failed', taskId, error: parsed.error };
       }
 
       await this.repository.completeRun({
-        taskId: task.id,
+        taskId,
         runId,
         model: result.model,
         specification: parsed.data,
@@ -116,22 +113,22 @@ export class GenerateTaskSpecificationUseCase {
         buildEvent({
           event: 'completed',
           runId,
-          taskId: task.id,
+          taskId,
           specification: parsed.data,
         }),
       );
 
-      return { status: 'completed', taskId: task.id, specification: parsed.data };
+      return { status: 'completed', taskId, specification: parsed.data };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'erro desconhecido do provider';
-      this.logger.error(`geração taskId=${task.id} falhou: ${message}`);
+      this.logger.error(`geração taskId=${taskId} falhou: ${message}`);
       await this.repository.failRun({
-        taskId: task.id,
+        taskId,
         runId,
         errorMessage: message,
       });
-      this.emit(onEvent, buildEvent({ event: 'failed', runId, taskId: task.id, error: message }));
-      return { status: 'failed', taskId: task.id, error: message };
+      this.emit(onEvent, buildEvent({ event: 'failed', runId, taskId, error: message }));
+      return { status: 'failed', taskId, error: message };
     }
   }
 
