@@ -4,7 +4,7 @@
 > persistência refinou o modelo para sete entidades (`User`, `RefreshSession`, `Task`,
 > `TaskGenerationRun`, `TaskArtifact`, `TaskEvaluation`, `LlmUsage`) para suportar retentativas,
 > imutabilidade do resultado e observabilidade de tokens. Ver
-> [ADR-008](adr/008-persistence-model-refinement.md) e `apps/api/prisma/schema.prisma`.
+> [ADR-008](adr/008-persistence-model-refinement.md) e `api/prisma/schema.prisma`.
 > O contrato conceitual abaixo permanece válido.
 
 ## Entidades
