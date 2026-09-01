@@ -28,12 +28,14 @@ Definition of Done.
 ai-task-architect/
 ├── api/                 # API NestJS
 │   ├── src/
-│   │   ├── auth/        # autenticação JWT (access + refresh)
-│   │   ├── tasks/       # geração de tarefas (domínio, casos de uso, infra, HTTP)
-│   │   ├── users/       # repositório de usuários
-│   │   ├── prisma/      # PrismaService/PrismaModule
-│   │   ├── health/      # health check
-│   │   └── common/      # pipes, filtros, throttler
+│   │   ├── modules/     # módulos de feature, cada um com camadas:
+│   │   │   ├── tasks/   #   application / infrastructure / presentation / schemas
+│   │   │   ├── auth/    #   autenticação JWT (access + refresh)
+│   │   │   ├── users/   #   repositório de usuários
+│   │   │   └── health/  #   health check
+│   │   ├── config/      # configuração validada (Zod)
+│   │   ├── common/      # pipes, filtros, throttler (transversais)
+│   │   └── prisma/      # PrismaService/PrismaModule
 │   └── prisma/          # schema, migrations e seed
 ├── web/                 # SPA Vue 3
 ├── docs/                # documentação de arquitetura e ADRs

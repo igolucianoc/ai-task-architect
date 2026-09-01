@@ -17,29 +17,36 @@ em uma especificação de implementação estruturada, gerada por LLM. O prompt 
 
 ## Decisão
 
-Organizar o módulo `tasks` em camadas com dependências apontando para dentro (arquitetura
-hexagonal / ports & adapters):
+Organizar cada módulo sob `src/modules/<módulo>/` com quatro camadas canônicas
+(`application`, `infrastructure`, `presentation`, `schemas`), seguindo o modelo de estrutura do
+projeto. As dependências apontam para dentro (arquitetura hexagonal / ports & adapters):
 
 ```
-tasks/
-├── domain/                         # núcleo, sem dependências de framework/SDK
+modules/tasks/
+├── application/                    # regras + orquestração; sem dependência de SDK
 │   ├── task-specification.ts       # schema Zod + parse defensivo da saída do LLM
 │   ├── prompt-builder.ts           # monta as mensagens de geração
-│   └── ports/
-│       └── llm-provider.port.ts    # interface LlmProvider + token DI LLM_PROVIDER
-├── use-cases/
+│   ├── llm-provider.port.ts        # interface LlmProvider + token DI LLM_PROVIDER
 │   └── generate-task-specification.use-case.ts   # orquestra a geração
-├── infra/
-│   ├── huggingface/huggingface.provider.ts       # adapter do SDK oficial
-│   └── fake/fake-llm.provider.ts                 # adapter para testes/offline
-├── tasks.repository.ts             # persistência (Prisma), transacional
-├── tasks.controller.ts             # apresentação HTTP
-├── tasks.presenter.ts              # entidades → views
+├── infrastructure/                 # adapters concretos
+│   ├── huggingface.provider.ts     # adapter do SDK oficial
+│   ├── fake-llm.provider.ts        # adapter para testes/offline
+│   └── tasks.repository.ts         # persistência (Prisma), transacional
+├── presentation/
+│   ├── tasks.controller.ts         # apresentação HTTP
+│   └── tasks.presenter.ts          # entidades → views
+├── schemas/
+│   └── create-task.schema.ts       # validação de entrada (Zod)
 └── tasks.module.ts                 # composição + factory do provider
 ```
 
-**Regra de dependência:** `domain` não importa `infra`, Prisma nem o SDK. O caso de uso depende da
-**porta** `LlmProvider` (injetada via token `LLM_PROVIDER`), nunca da implementação concreta.
+**Regra de dependência:** `application` não importa o SDK nem o framework de infraestrutura. O caso
+de uso depende da **porta** `LlmProvider` (injetada via token `LLM_PROVIDER`), nunca da
+implementação concreta. A porta vive em `application` (é um contrato do domínio); os adapters em
+`infrastructure` a implementam.
+
+As pastas transversais `config/`, `common/` e `prisma/` permanecem em `src/` (não são módulos de
+domínio). Os demais módulos (`auth`, `users`, `health`) seguem a mesma organização de camadas.
 
 ## Pontos-chave
 

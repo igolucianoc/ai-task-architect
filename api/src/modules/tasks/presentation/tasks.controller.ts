@@ -1,0 +1,85 @@
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Param,
+  Query,
+  HttpCode,
+  HttpStatus,
+  NotFoundException,
+  ParseUUIDPipe,
+} from '@nestjs/common';
+import { CurrentUser } from '../../auth/infrastructure/current-user.decorator';
+import { AuthenticatedUser } from '../../auth/infrastructure/jwt.strategy';
+import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
+import { GenerateTaskSpecificationUseCase } from '../application/generate-task-specification.use-case';
+import { TasksRepository } from '../infrastructure/tasks.repository';
+import {
+  createTaskSchema,
+  CreateTaskDto,
+  listTasksQuerySchema,
+  ListTasksQueryDto,
+} from '../schemas/create-task.schema';
+import { toTaskDetail, toTaskSummary, TaskDetailView, TaskSummaryView } from './tasks.presenter';
+
+interface PaginatedTasks {
+  items: TaskSummaryView[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+@Controller('tasks')
+export class TasksController {
+  constructor(
+    private readonly generateTask: GenerateTaskSpecificationUseCase,
+    private readonly repository: TasksRepository,
+  ) {}
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  async create(
+    @Body(new ZodValidationPipe(createTaskSchema)) dto: CreateTaskDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<TaskDetailView> {
+    const result = await this.generateTask.execute({
+      userId: user.id,
+      description: dto.description,
+    });
+
+    const task = await this.repository.findByIdForUser(result.taskId, user.id);
+    if (!task) {
+      throw new NotFoundException('Tarefa não encontrada após a geração');
+    }
+    return toTaskDetail(task);
+  }
+
+  @Get()
+  async list(
+    @Query(new ZodValidationPipe(listTasksQuerySchema)) query: ListTasksQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<PaginatedTasks> {
+    const skip = (query.page - 1) * query.pageSize;
+    const { items, total } = await this.repository.listForUser(user.id, skip, query.pageSize);
+
+    return {
+      items: items.map(toTaskSummary),
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+    };
+  }
+
+  @Get(':id')
+  async getById(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<TaskDetailView> {
+    const task = await this.repository.findByIdForUser(id, user.id);
+    if (!task) {
+      throw new NotFoundException('Tarefa não encontrada');
+    }
+    return toTaskDetail(task);
+  }
+}
