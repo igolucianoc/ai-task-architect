@@ -22,6 +22,12 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true },
   },
   {
+    // Rota estática declarada antes da dinâmica para casar '/tasks/new' com segurança.
+    path: '/tasks/new',
+    component: () => import('@/pages/CreateTaskPage.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/tasks/:id',
     component: () => import('@/pages/TaskDetailPage.vue'),
     meta: { requiresAuth: true },
