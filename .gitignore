@@ -39,9 +39,3 @@ lcov.info
 # Prisma
 api/prisma/migrations/dev.db
 
-# Pacote de ferramentas agent-skills (nao versionar junto do projeto)
-agent-skills/
-
-# Configuracao e artefatos do Kiro (nao versionar junto do projeto)
-.kiro/
-.kiroignore
