@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { GenerateTaskSpecificationUseCase } from './generate-task-specification.use-case';
 import { FakeLlmProvider } from '../infrastructure/fake-llm.provider';
 import { TasksRepository } from '../infrastructure/tasks.repository';
+import { type TaskGenerationEvent } from './task-generation-events';
 import { Task, TaskGenerationRun } from '@prisma/client';
 
 function makeTaskAndRun(): { task: Task; run: TaskGenerationRun } {
@@ -94,5 +95,79 @@ describe('GenerateTaskSpecificationUseCase', () => {
 
     expect(repository.createTaskWithRun).toHaveBeenCalledOnce();
     expect(repository.createTaskWithRun).toHaveBeenCalledWith('user-1', 'x', expect.any(String));
+  });
+
+  it('emite os eventos de progresso na ordem esperada e finaliza com completed', async () => {
+    const events: TaskGenerationEvent[] = [];
+
+    const result = await useCase.execute(
+      { userId: 'user-1', description: 'necessidade' },
+      (event) => events.push(event),
+    );
+
+    expect(result.status).toBe('completed');
+    expect(events.map((e) => e.event)).toEqual([
+      'started',
+      'analyzing_context',
+      'generating_requirements',
+      'generating_acceptance_criteria',
+      'evaluating',
+      'completed',
+    ]);
+    // Todos os eventos compartilham o mesmo runId (= run.id do mock).
+    expect(events.every((e) => e.runId === 'run-1')).toBe(true);
+
+    const last = events.at(-1);
+    expect(last?.event).toBe('completed');
+    if (last?.event === 'completed') {
+      expect(last.taskId).toBe('task-1');
+      expect(last.specification.title).toBeTruthy();
+    }
+  });
+
+  it('emite failed como último evento quando o provider lança erro (após started)', async () => {
+    provider.simulateFailure('provider indisponível');
+    const events: TaskGenerationEvent[] = [];
+
+    const result = await useCase.execute({ userId: 'user-1', description: 'x' }, (event) =>
+      events.push(event),
+    );
+
+    expect(result.status).toBe('failed');
+    expect(events[0]?.event).toBe('started');
+    const last = events.at(-1);
+    expect(last?.event).toBe('failed');
+    if (last?.event === 'failed') {
+      expect(last.error).toContain('provider indisponível');
+      expect(last.runId).toBe('run-1');
+    }
+  });
+
+  it('emite failed como último evento quando a saída do modelo é inválida', async () => {
+    provider.setResponse('desculpe, não consegui gerar');
+    const events: TaskGenerationEvent[] = [];
+
+    const result = await useCase.execute({ userId: 'user-1', description: 'x' }, (event) =>
+      events.push(event),
+    );
+
+    expect(result.status).toBe('failed');
+    expect(events.at(-1)?.event).toBe('failed');
+  });
+
+  it('mantém o comportamento atual quando execute é chamado sem onEvent', async () => {
+    const result = await useCase.execute({ userId: 'user-1', description: 'necessidade' });
+
+    expect(result.status).toBe('completed');
+    expect(repository.completeRun).toHaveBeenCalledOnce();
+  });
+
+  it('não derruba a geração quando o listener lança exceção', async () => {
+    const result = await useCase.execute({ userId: 'user-1', description: 'necessidade' }, () => {
+      throw new Error('falha no consumidor de eventos');
+    });
+
+    expect(result.status).toBe('completed');
+    expect(repository.completeRun).toHaveBeenCalledOnce();
   });
 });

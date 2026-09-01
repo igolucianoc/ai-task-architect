@@ -113,3 +113,11 @@ export function buildEvent(input: EventInput): TaskGenerationEvent {
 export function isTerminalEvent(event: TaskGenerationEvent): boolean {
   return event.event === 'completed' || event.event === 'failed';
 }
+
+/**
+ * Listener de eventos de geração. Contrato desacoplado do transporte: o
+ * use-case apenas chama o listener a cada evento, sem conhecer SSE ou qualquer
+ * outro mecanismo de entrega. A fatia de SSE (posterior) fornece uma
+ * implementação que empurra os eventos para o stream.
+ */
+export type TaskGenerationEventListener = (event: TaskGenerationEvent) => void;
