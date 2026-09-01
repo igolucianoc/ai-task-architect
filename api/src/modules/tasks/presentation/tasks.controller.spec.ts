@@ -6,6 +6,7 @@ import { TaskStatus } from '@prisma/client';
 import { TasksController } from './tasks.controller';
 import { GenerateTaskSpecificationUseCase } from '../application/generate-task-specification.use-case';
 import { TasksRepository, TaskWithRelations } from '../infrastructure/tasks.repository';
+import { EvaluationQueue } from '../infrastructure/evaluation.queue';
 import { AuthenticatedUser } from '../../auth/infrastructure/jwt.strategy';
 import { buildEvent, type TaskGenerationEvent } from '../application/task-generation-events';
 import { type TaskSpecification } from '../application/task-specification';
@@ -60,6 +61,7 @@ describe('TasksController', () => {
     listForUser: ReturnType<typeof vi.fn>;
   };
   let jwt: { verify: ReturnType<typeof vi.fn> };
+  let evaluationQueue: { enqueue: ReturnType<typeof vi.fn> };
   let controller: TasksController;
 
   beforeEach(() => {
@@ -70,11 +72,13 @@ describe('TasksController', () => {
       listForUser: vi.fn(),
     };
     jwt = { verify: vi.fn() };
+    evaluationQueue = { enqueue: vi.fn().mockResolvedValue(undefined) };
     controller = new TasksController(
       generateTask as unknown as GenerateTaskSpecificationUseCase,
       repository as unknown as TasksRepository,
       jwt as unknown as JwtService,
       { jwtSecret: 'segredo-de-teste-com-32-caracteres-ok' } as never,
+      evaluationQueue as unknown as EvaluationQueue,
     );
   });
 
@@ -138,6 +142,33 @@ describe('TasksController', () => {
 
       expect(generateTask.execute).toHaveBeenCalledOnce();
       expect(events.map((e) => e.event)).toEqual(['started', 'completed']);
+      // Ao concluir a geração, a avaliação assíncrona é enfileirada com o taskId.
+      expect(evaluationQueue.enqueue).toHaveBeenCalledWith({ taskId: 'task-1' });
+    });
+
+    it('não enfileira avaliação quando a geração falha', async () => {
+      jwt.verify.mockReturnValue({ sub: 'user-1', email: 'user@example.com' });
+      repository.findByIdForUser.mockResolvedValue(makeTask({ status: TaskStatus.PENDING }));
+      generateTask.execute.mockImplementation(
+        (_input: unknown, onEvent: (e: TaskGenerationEvent) => void): Promise<void> => {
+          onEvent(buildEvent({ event: 'started', runId: 'run-1' }));
+          onEvent(
+            buildEvent({
+              event: 'failed',
+              runId: 'run-1',
+              taskId: 'task-1',
+              error: 'provider caiu',
+            }),
+          );
+          return Promise.resolve();
+        },
+      );
+
+      const observable = await controller.stream('task-1', 'ok');
+      const events = await collect(observable);
+
+      expect(events.map((e) => e.event)).toEqual(['started', 'failed']);
+      expect(evaluationQueue.enqueue).not.toHaveBeenCalled();
     });
 
     it('reemite completed com a especificação reidratada quando já COMPLETED', async () => {

@@ -1,12 +1,16 @@
 import { Module, Logger } from '@nestjs/common';
 import { ConfigType } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
+import { BullModule } from '@nestjs/bullmq';
 import { appConfig } from '../../config/app.config';
 import { LLM_PROVIDER, LlmProvider } from './application/llm-provider.port';
 import { HuggingFaceProvider } from './infrastructure/huggingface.provider';
 import { FakeLlmProvider } from './infrastructure/fake-llm.provider';
 import { TasksRepository } from './infrastructure/tasks.repository';
 import { GenerateTaskSpecificationUseCase } from './application/generate-task-specification.use-case';
+import { EvaluateTaskSpecificationUseCase } from './application/evaluate-task-specification.use-case';
+import { EvaluationQueue, EVALUATION_QUEUE } from './infrastructure/evaluation.queue';
+import { EvaluationProcessor } from './infrastructure/evaluation.processor';
 import { TasksController } from './presentation/tasks.controller';
 
 /** Placeholder usado no .env de desenvolvimento quando não há token real. */
@@ -31,17 +35,43 @@ export function llmProviderFactory(config: ConfigType<typeof appConfig>): LlmPro
   }
 
   logger.log(`Usando HuggingFaceProvider (model=${config.hfModel})`);
+  // TODO(etapa-07): a avaliação (LLM-as-Judge) reusa este mesmo provider e, por
+  // ora, o mesmo model de geração. Se desejarmos um model dedicado, criar um
+  // provider próprio parametrizado por `config.hfModelEvaluation`.
   return new HuggingFaceProvider({ token: config.hfToken, model: config.hfModel });
 }
 
 @Module({
-  // JwtModule disponibiliza o JwtService usado pelo controller para validar o
-  // token na rota SSE (autenticação manual via query string — ver ADR-005).
-  imports: [JwtModule.register({})],
+  imports: [
+    // JwtModule disponibiliza o JwtService usado pelo controller para validar o
+    // token na rota SSE (autenticação manual via query string — ver ADR-005).
+    JwtModule.register({}),
+    // Conexão BullMQ a partir do redisUrl (ADR-006). forRootAsync injeta a
+    // config para não acoplar a connection string em tempo de import.
+    BullModule.forRootAsync({
+      inject: [appConfig.KEY],
+      useFactory: (config: ConfigType<typeof appConfig>) => ({
+        connection: { url: config.redisUrl },
+        // Defaults de job da avaliação (ADR-006): 3 tentativas com backoff
+        // exponencial e limpeza de jobs concluídos/falhos para não crescer sem
+        // limite no Redis.
+        defaultJobOptions: {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 2000 },
+          removeOnComplete: 100,
+          removeOnFail: 200,
+        },
+      }),
+    }),
+    BullModule.registerQueue({ name: EVALUATION_QUEUE }),
+  ],
   controllers: [TasksController],
   providers: [
     TasksRepository,
     GenerateTaskSpecificationUseCase,
+    EvaluateTaskSpecificationUseCase,
+    EvaluationQueue,
+    EvaluationProcessor,
     {
       provide: LLM_PROVIDER,
       inject: [appConfig.KEY],

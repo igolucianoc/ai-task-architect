@@ -10,9 +10,18 @@ import {
   Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { TaskSpecification } from '../application/task-specification';
+import { TaskSpecification, parseTaskSpecification } from '../application/task-specification';
 import { LlmUsageMetrics } from '../application/llm-provider.port';
 import { EvaluationOutcome } from '../application/task-evaluation';
+
+/**
+ * Dados necessários para avaliar uma task já concluída: a necessidade original
+ * (`description`) e a especificação reidratada do último artifact.
+ */
+export interface TaskEvaluationSource {
+  description: string;
+  specification: TaskSpecification;
+}
 
 export interface TaskWithRelations extends Task {
   artifacts: { id: string; content: string; contentFormat: string; createdAt: Date }[];
@@ -256,6 +265,43 @@ export class TasksRepository {
   /** Leitura da avaliação por taskId (útil para testes/E2E). */
   findEvaluationByTaskId(taskId: string): Promise<TaskEvaluation | null> {
     return this.prisma.taskEvaluation.findUnique({ where: { taskId } });
+  }
+
+  /**
+   * Carrega a task e reidrata sua especificação a partir do último artifact,
+   * para o worker de avaliação. O `parse` é defensivo (a saída original do LLM
+   * já foi validada na geração, mas não confiamos cegamente no conteúdo em
+   * disco): retorna `null` se a task não existir, não tiver artifact ou o
+   * conteúdo não for uma especificação válida — evitando retry infinito de dado
+   * inválido no BullMQ.
+   */
+  async findTaskWithArtifactById(taskId: string): Promise<TaskEvaluationSource | null> {
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      include: {
+        artifacts: {
+          select: { content: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    if (!task) {
+      return null;
+    }
+
+    const artifact = task.artifacts.at(0);
+    if (!artifact) {
+      return null;
+    }
+
+    const parsed = parseTaskSpecification(artifact.content);
+    if (!parsed.success) {
+      return null;
+    }
+
+    return { description: task.description, specification: parsed.data };
   }
 
   findByIdForUser(taskId: string, userId: string): Promise<TaskWithRelations | null> {

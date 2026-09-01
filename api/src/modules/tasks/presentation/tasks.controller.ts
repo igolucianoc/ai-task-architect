@@ -27,6 +27,7 @@ import { AccessTokenPayload } from '../../auth/application/token.service';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { GenerateTaskSpecificationUseCase } from '../application/generate-task-specification.use-case';
 import { TasksRepository, TaskWithRelations } from '../infrastructure/tasks.repository';
+import { EvaluationQueue } from '../infrastructure/evaluation.queue';
 import {
   buildEvent,
   isTerminalEvent,
@@ -68,6 +69,7 @@ export class TasksController {
     private readonly jwt: JwtService,
     @Inject(appConfig.KEY)
     private readonly config: ConfigType<typeof appConfig>,
+    private readonly evaluationQueue: EvaluationQueue,
   ) {}
 
   @Post()
@@ -229,6 +231,11 @@ export class TasksController {
           return;
         }
         this.push(subject, event);
+        if (event.event === 'completed') {
+          // Geração concluída com sucesso: enfileira a avaliação assíncrona
+          // (LLM-as-Judge — ADR-006). NÃO enfileiramos para tarefas que falharam.
+          this.enqueueEvaluation(task.id);
+        }
         if (isTerminalEvent(event)) {
           finish();
         }
@@ -246,6 +253,20 @@ export class TasksController {
           finish();
         }
       });
+  }
+
+  /**
+   * Enfileira a avaliação sem bloquear/derrubar o stream. O enqueue é
+   * fire-and-forget: uma falha ao enfileirar (ex.: Redis momentaneamente
+   * indisponível) é apenas logada — não interrompe a entrega do resultado da
+   * geração ao usuário. O jobId determinístico (= taskId) evita duplicar a
+   * avaliação se o stream for reaberto.
+   */
+  private enqueueEvaluation(taskId: string): void {
+    void this.evaluationQueue.enqueue({ taskId }).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : 'erro desconhecido';
+      this.logger.error(`falha ao enfileirar avaliação taskId=${taskId}: ${message}`);
+    });
   }
 
   /**
