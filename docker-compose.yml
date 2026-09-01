@@ -34,13 +34,13 @@ services:
 
   api:
     build:
-      context: ./apps/api
+      context: ./api
       dockerfile: Dockerfile
       target: development
     container_name: ai-task-architect-api
     restart: unless-stopped
     env_file:
-      - path: ./apps/api/.env
+      - path: ./api/.env
         required: false
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-ai_task_architect}
@@ -48,7 +48,7 @@ services:
     ports:
       - "${API_PORT:-3000}:3000"
     volumes:
-      - ./apps/api:/app
+      - ./api:/app
       - /app/node_modules
     depends_on:
       postgres:
@@ -64,7 +64,7 @@ services:
 
   web:
     build:
-      context: ./apps/web
+      context: ./web
       dockerfile: Dockerfile
       target: development
     container_name: ai-task-architect-web
@@ -72,7 +72,7 @@ services:
     ports:
       - "${WEB_PORT:-5173}:5173"
     volumes:
-      - ./apps/web:/app
+      - ./web:/app
       - /app/node_modules
     depends_on:
       - api
