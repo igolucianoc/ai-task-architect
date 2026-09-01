@@ -33,6 +33,11 @@ enum EvaluationStatus {
   UNAVAILABLE
 }
 
+enum QualityGateResult {
+  APPROVED
+  REJECTED
+}
+
 enum LlmOperation {
   GENERATION
   EVALUATION
@@ -134,13 +139,15 @@ model TaskArtifact {
 model TaskEvaluation {
   id         String           @id @default(uuid()) @db.Uuid
   taskId     String           @unique @map("task_id") @db.Uuid
-  status     EvaluationStatus @default(PENDING)
-  score      Decimal?         @db.Decimal(4, 2)
-  rationale  String?          @db.Text
-  dimensions Json?
-  model      String?
-  createdAt  DateTime         @default(now()) @map("created_at")
-  updatedAt  DateTime         @updatedAt @map("updated_at")
+  status        EvaluationStatus   @default(PENDING)
+  result        QualityGateResult? @map("result")
+  promptVersion String?            @map("prompt_version")
+  score         Decimal?           @db.Decimal(4, 2)
+  rationale     String?            @db.Text
+  dimensions    Json?
+  model         String?
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
 
   task      Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
   llmUsages LlmUsage[]
