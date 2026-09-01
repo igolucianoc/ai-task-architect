@@ -1,0 +1,174 @@
+// AI Task Architect — modelo de persistência
+// Ver docs/domain-model.md e docs/adr/008-persistence-model-refinement.md
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum TaskStatus {
+  PENDING
+  STREAMING
+  COMPLETED
+  FAILED
+}
+
+enum GenerationRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum EvaluationStatus {
+  PENDING
+  COMPLETED
+  UNAVAILABLE
+}
+
+enum LlmOperation {
+  GENERATION
+  EVALUATION
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Usuário e autenticação
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  displayName  String   @map("display_name")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tasks           Task[]
+  refreshSessions RefreshSession[]
+
+  @@map("users")
+}
+
+model RefreshSession {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  userAgent String?   @map("user_agent")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_sessions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Domínio de geração de tarefas
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Agregado raiz: a solicitação do usuário
+model Task {
+  id          String     @id @default(uuid()) @db.Uuid
+  userId      String     @map("user_id") @db.Uuid
+  description String     @db.Text
+  status      TaskStatus @default(PENDING)
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generationRuns TaskGenerationRun[]
+  artifacts      TaskArtifact[]
+  evaluation     TaskEvaluation?
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("tasks")
+}
+
+// Cada execução de geração via LLM (permite retentativas e histórico)
+model TaskGenerationRun {
+  id          String              @id @default(uuid()) @db.Uuid
+  taskId      String              @map("task_id") @db.Uuid
+  status      GenerationRunStatus @default(RUNNING)
+  model       String
+  errorMessage String?            @map("error_message") @db.Text
+  startedAt   DateTime            @default(now()) @map("started_at")
+  finishedAt  DateTime?           @map("finished_at")
+
+  task      Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  artifact  TaskArtifact?
+  llmUsages LlmUsage[]
+
+  @@index([taskId])
+  @@index([status])
+  @@map("task_generation_runs")
+}
+
+// O conteúdo gerado (especificação em Markdown), vinculado a uma run
+model TaskArtifact {
+  id              String   @id @default(uuid()) @db.Uuid
+  taskId          String   @map("task_id") @db.Uuid
+  generationRunId String   @unique @map("generation_run_id") @db.Uuid
+  content         String   @db.Text
+  contentFormat   String   @default("markdown") @map("content_format")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  task          Task              @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  generationRun TaskGenerationRun @relation(fields: [generationRunId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("task_artifacts")
+}
+
+// Avaliação de qualidade (LLM Judge) da tarefa
+model TaskEvaluation {
+  id         String           @id @default(uuid()) @db.Uuid
+  taskId     String           @unique @map("task_id") @db.Uuid
+  status     EvaluationStatus @default(PENDING)
+  score      Decimal?         @db.Decimal(4, 2)
+  rationale  String?          @db.Text
+  dimensions Json?
+  model      String?
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+
+  task      Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  llmUsages LlmUsage[]
+
+  @@index([status])
+  @@map("task_evaluations")
+}
+
+// Consumo de tokens por chamada ao LLM (observabilidade e custo)
+model LlmUsage {
+  id               String       @id @default(uuid()) @db.Uuid
+  operation        LlmOperation
+  model            String
+  promptTokens     Int          @map("prompt_tokens")
+  completionTokens Int          @map("completion_tokens")
+  totalTokens      Int          @map("total_tokens")
+  latencyMs        Int          @map("latency_ms")
+  createdAt        DateTime     @default(now()) @map("created_at")
+
+  generationRunId String?            @map("generation_run_id") @db.Uuid
+  generationRun   TaskGenerationRun? @relation(fields: [generationRunId], references: [id], onDelete: SetNull)
+
+  evaluationId String?         @map("evaluation_id") @db.Uuid
+  evaluation   TaskEvaluation? @relation(fields: [evaluationId], references: [id], onDelete: SetNull)
+
+  @@index([operation])
+  @@index([generationRunId])
+  @@index([evaluationId])
+  @@index([createdAt])
+  @@map("llm_usages")
+}
