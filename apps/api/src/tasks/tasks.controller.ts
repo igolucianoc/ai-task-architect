@@ -9,7 +9,6 @@ import {
   HttpStatus,
   NotFoundException,
   ParseUUIDPipe,
-  UsePipes,
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
@@ -40,9 +39,8 @@ export class TasksController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @UsePipes(new ZodValidationPipe(createTaskSchema))
   async create(
-    @Body() dto: CreateTaskDto,
+    @Body(new ZodValidationPipe(createTaskSchema)) dto: CreateTaskDto,
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<TaskDetailView> {
     const result = await this.generateTask.execute({
