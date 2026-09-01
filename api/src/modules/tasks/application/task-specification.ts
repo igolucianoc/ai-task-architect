@@ -62,7 +62,7 @@ export function parseTaskSpecification(raw: string): SpecParseResult {
  * Modelos frequentemente embrulham o JSON em cercas markdown ou texto.
  * Extrai o primeiro objeto JSON balanceado da string, se houver.
  */
-function extractJsonObject(raw: string): string | null {
+export function extractJsonObject(raw: string): string | null {
   const start = raw.indexOf('{');
   if (start === -1) {
     return null;
