@@ -69,6 +69,8 @@ services:
       target: development
     container_name: ai-task-architect-web
     restart: unless-stopped
+    environment:
+      VITE_API_PROXY_TARGET: http://api:3000
     ports:
       - "${WEB_PORT:-5173}:5173"
     volumes:

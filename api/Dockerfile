@@ -5,8 +5,10 @@ RUN apk add --no-cache dumb-init
 
 # ── Dependências ──────────────────────────────────────────────────────────────
 FROM base AS deps
+# Ferramentas de build necessárias para dependências com etapa de compilação nativa.
+RUN apk add --no-cache python3 make g++
 COPY package*.json ./
-RUN npm ci --ignore-scripts
+RUN npm ci
 
 # ── Desenvolvimento ───────────────────────────────────────────────────────────
 FROM base AS development

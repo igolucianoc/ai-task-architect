@@ -13,7 +13,10 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        // Em Docker Compose, o Vite roda dentro do container web e precisa
+        // alcançar a API pelo nome do serviço (api). Em dev local, o fallback
+        // localhost:3000 mantém o fluxo fora do container funcionando.
+        target: process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:3000',
         changeOrigin: true,
       },
     },
