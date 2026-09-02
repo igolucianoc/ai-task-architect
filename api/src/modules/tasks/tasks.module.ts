@@ -35,9 +35,9 @@ export function llmProviderFactory(config: ConfigType<typeof appConfig>): LlmPro
   }
 
   logger.log(`Usando HuggingFaceProvider (model=${config.hfModel})`);
-  // TODO(etapa-07): a avaliação (LLM-as-Judge) reusa este mesmo provider e, por
-  // ora, o mesmo model de geração. Se desejarmos um model dedicado, criar um
-  // provider próprio parametrizado por `config.hfModelEvaluation`.
+  // Nota: a avaliação (LLM-as-Judge) reusa este mesmo provider e, por ora, o
+  // mesmo model de geração. Um model dedicado ao juiz (`config.hfModelEvaluation`)
+  // é um próximo passo — bastaria injetar um provider próprio parametrizado.
   return new HuggingFaceProvider({ token: config.hfToken, model: config.hfModel });
 }
 
