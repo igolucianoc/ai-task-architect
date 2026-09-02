@@ -12,6 +12,8 @@ RUN npm ci --ignore-scripts
 FROM base AS development
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Gera o Prisma Client com o binary engine correto para Alpine (musl).
+RUN npx prisma generate
 EXPOSE 3000
 CMD ["dumb-init", "npx", "nest", "start", "--watch"]
 
@@ -19,6 +21,8 @@ CMD ["dumb-init", "npx", "nest", "start", "--watch"]
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Gera o Prisma Client (musl) antes de compilar.
+RUN npx prisma generate
 RUN npm run build
 
 # ── Produção ──────────────────────────────────────────────────────────────────

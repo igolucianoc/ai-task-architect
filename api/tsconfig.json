@@ -10,8 +10,10 @@
     "sourceMap": true,
     "outDir": "./dist",
     "baseUrl": "./",
-    "incremental": true,
-    "tsBuildInfoFile": "./node_modules/.cache/tsconfig.tsbuildinfo",
+    // `incremental` foi desativado: combinado com o `deleteOutDir` do nest build,
+    // o arquivo .tsbuildinfo sobrevivia ao dist apagado e o tsc pulava a emissão,
+    // gerando builds "vazios" (dist sem main.js). Sem incremental, cada build
+    // sempre emite. O build de um projeto deste tamanho é rápido o suficiente.
     "skipLibCheck": true,
     "strictNullChecks": true,
     "noImplicitAny": true,

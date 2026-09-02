@@ -3,6 +3,9 @@
 
 generator client {
   provider = "prisma-client-js"
+  // "native" cobre o host de desenvolvimento (glibc); o alvo musl é necessário
+  // para rodar o client nas imagens Docker baseadas em Alpine.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
