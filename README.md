@@ -78,7 +78,7 @@ especificação de exemplo — útil para rodar e demonstrar a aplicação offli
 Sobe PostgreSQL, Redis, API e Web:
 
 ```bash
-docker compose up -d
+docker compose up --build
 ```
 
 - API: http://localhost:3000/api
