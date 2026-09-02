@@ -1,6 +1,6 @@
 ---
 name: source-driven-development
-description: Grounds every implementation decision in official documentation. Use when you want authoritative, source-cited code free from outdated patterns. Use when building with any framework or library where correctness matters.
+description: Use when implementation depends on current/authoritative external documentation for a framework, library, API, or standard.
 ---
 
 # Source-Driven Development
