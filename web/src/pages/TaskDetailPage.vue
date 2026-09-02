@@ -19,6 +19,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router';
 import { useTasksStore } from '@/stores/tasks.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useTaskGenerationStream } from '@/composables/useTaskGenerationStream';
+import type { LlmTotalsView } from '@/services/tasks.service';
 import { formatDate } from '@/utils/format-date';
 import AppSpinner from '@/components/AppSpinner.vue';
 import BaseButton from '@/components/BaseButton.vue';
@@ -28,6 +29,7 @@ import TaskStatusBadge from '@/components/TaskStatusBadge.vue';
 import GenerationProgress from '@/components/GenerationProgress.vue';
 import SpecificationView from '@/components/SpecificationView.vue';
 import EvaluationPanel from '@/components/EvaluationPanel.vue';
+import LlmMetricsPanel from '@/components/LlmMetricsPanel.vue';
 
 // Parâmetros de polling da avaliação.
 const POLL_INTERVAL_MS = 2000;
@@ -89,6 +91,21 @@ const specification = computed(
 
 // Avaliação atual (do detalhe carregado).
 const evaluation = computed(() => current.value?.evaluation ?? null);
+
+// --- Métricas de uso de LLM (observabilidade discreta) ---
+// Totais zerados usados como fallback: a prop `totals` do painel é obrigatória.
+const EMPTY_LLM_TOTALS: LlmTotalsView = {
+  promptTokens: 0,
+  completionTokens: 0,
+  totalTokens: 0,
+  estimatedCost: 0,
+};
+
+const generationUsage = computed(() => current.value?.lastRun?.usage ?? null);
+const evaluationUsage = computed(() => current.value?.evaluation?.usage ?? null);
+const llmTotals = computed(() => current.value?.llmTotals ?? EMPTY_LLM_TOTALS);
+const evaluationModel = computed(() => current.value?.evaluation?.model ?? null);
+const evaluationPromptVersion = computed(() => current.value?.evaluation?.promptVersion ?? null);
 
 // A avaliação está pronta quando existe e o status é terminal (não PENDING).
 const isEvaluationReady = computed(() => {
@@ -299,6 +316,17 @@ watch(hasCompleted, (completed) => {
             Atualizar
           </BaseButton>
         </div>
+      </BaseCard>
+
+      <!-- Rodapé discreto de métricas de uso de LLM (geração + avaliação). -->
+      <BaseCard class="task-detail-page__block">
+        <LlmMetricsPanel
+          :generation-usage="generationUsage"
+          :evaluation-usage="evaluationUsage"
+          :totals="llmTotals"
+          :evaluation-model="evaluationModel"
+          :evaluation-prompt-version="evaluationPromptVersion"
+        />
       </BaseCard>
     </template>
   </section>
