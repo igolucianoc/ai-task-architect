@@ -5,8 +5,8 @@ import {
   HealthCheckResult,
   HealthIndicatorResult,
 } from '@nestjs/terminus';
-import { PrismaHealthIndicator } from '../infrastructure/prisma.health';
-import { Public } from '../../auth/infrastructure/public.decorator';
+import { PrismaHealthIndicator } from '../persistence/prisma.health';
+import { Public } from '../../auth/presentation/http/public.decorator';
 
 @Public()
 @Controller('health')

@@ -1,12 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { JwtService } from '@nestjs/jwt';
-import { RefreshSession } from '@prisma/client';
 import { TokenService } from './token.service';
-import { PrismaService } from '../../../prisma/prisma.service';
-import type { AppConfig } from '../../../config/app.config';
+import { RefreshSessionEntity } from '../domain/refresh-session.entity';
+import { InMemoryRefreshSessionRepository } from '../persistence/in-memory-refresh-session.repository';
+import type { AppConfig } from '../../../core/config/app.config';
 
-function makeSession(overrides: Partial<RefreshSession> = {}): RefreshSession {
-  return {
+function makeSession(
+  overrides: Partial<ConstructorParameters<typeof RefreshSessionEntity>[0]> = {},
+): RefreshSessionEntity {
+  return new RefreshSessionEntity({
     id: 'session-1',
     userId: 'user-1',
     tokenHash: 'hash',
@@ -15,18 +17,13 @@ function makeSession(overrides: Partial<RefreshSession> = {}): RefreshSession {
     revokedAt: null,
     createdAt: new Date(),
     ...overrides,
-  };
+  });
 }
 
 describe('TokenService', () => {
   let service: TokenService;
   let jwt: { sign: ReturnType<typeof vi.fn> };
-  let prisma: {
-    refreshSession: {
-      create: ReturnType<typeof vi.fn>;
-      findUnique: ReturnType<typeof vi.fn>;
-    };
-  };
+  let sessions: InMemoryRefreshSessionRepository;
 
   const config = {
     jwtSecret: 'segredo-de-teste-com-mais-de-32-caracteres!',
@@ -36,22 +33,9 @@ describe('TokenService', () => {
 
   beforeEach(() => {
     jwt = { sign: vi.fn().mockReturnValue('signed-jwt') };
-    prisma = {
-      refreshSession: {
-        create: vi
-          .fn()
-          .mockImplementation(({ data }: { data: Partial<RefreshSession> }) =>
-            Promise.resolve(makeSession(data)),
-          ),
-        findUnique: vi.fn(),
-      },
-    };
+    sessions = new InMemoryRefreshSessionRepository();
 
-    service = new TokenService(
-      jwt as unknown as JwtService,
-      prisma as unknown as PrismaService,
-      config,
-    );
+    service = new TokenService(jwt as unknown as JwtService, sessions, config);
   });
 
   it('assina access token com secret e expiração da config', () => {
@@ -65,15 +49,25 @@ describe('TokenService', () => {
   });
 
   it('emite refresh token opaco e persiste apenas o hash', async () => {
+    const createSpy = vi.spyOn(sessions, 'create');
     const { rawToken } = await service.issueRefreshToken('user-1', 'jest-agent');
 
     expect(rawToken).toMatch(/^[A-Za-z0-9_-]+$/); // base64url
-    const createArg = prisma.refreshSession.create.mock.calls[0][0] as {
-      data: { tokenHash: string };
-    };
+    const createArg = createSpy.mock.calls[0][0];
     // O valor persistido nunca é o token em claro
-    expect(createArg.data.tokenHash).not.toBe(rawToken);
-    expect(createArg.data.tokenHash).toHaveLength(64); // sha256 hex
+    expect(createArg.tokenHash).not.toBe(rawToken);
+    expect(createArg.tokenHash).toHaveLength(64); // sha256 hex
+  });
+
+  it('recupera a sessão pelo token em claro via hash', async () => {
+    const { rawToken } = await service.issueRefreshToken('user-1');
+
+    const found = await service.findSessionByRawToken(rawToken);
+    expect(found).not.toBeNull();
+    expect(found?.userId).toBe('user-1');
+
+    // Token diferente não resolve para a mesma sessão
+    expect(await service.findSessionByRawToken('outro-token')).toBeNull();
   });
 
   it('considera sessão ativa quando não revogada e não expirada', () => {

@@ -15,17 +15,13 @@ import { Request, Response } from 'express';
 import { ConfigType } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService, PublicUser } from '../application/auth.service';
-import { AuthenticatedUser } from '../infrastructure/jwt.strategy';
-import { Public } from '../infrastructure/public.decorator';
-import { CurrentUser } from '../infrastructure/current-user.decorator';
-import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
-import { registerSchema, loginSchema, RegisterDto, LoginDto } from '../schemas/auth.schemas';
-import {
-  REFRESH_COOKIE_NAME,
-  setRefreshCookie,
-  clearRefreshCookie,
-} from '../infrastructure/auth.cookie';
-import { appConfig } from '../../../config/app.config';
+import { AuthenticatedUser } from './http/jwt.strategy';
+import { Public } from './http/public.decorator';
+import { CurrentUser } from './http/current-user.decorator';
+import { ZodValidationPipe } from '../../../infra/http/zod-validation.pipe';
+import { registerSchema, loginSchema, RegisterDto, LoginDto } from './schemas/auth.schemas';
+import { REFRESH_COOKIE_NAME, setRefreshCookie, clearRefreshCookie } from './http/auth.cookie';
+import { appConfig } from '../../../core/config/app.config';
 
 interface AuthResponseBody {
   user: PublicUser;

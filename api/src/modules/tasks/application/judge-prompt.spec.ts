@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { buildJudgeMessages, JUDGE_PROMPT_VERSION } from './judge-prompt';
 import { buildGenerationMessages } from './prompt-builder';
-import { parseJudgeResponse } from './task-evaluation';
-import { TaskSpecification } from './task-specification';
-import { FakeLlmProvider } from '../infrastructure/fake-llm.provider';
+import { parseJudgeResponse } from '../domain/task-evaluation';
+import { TaskSpecification } from '../domain/task-specification';
+import { FakeLlmProvider } from '../infra/fake-llm.provider';
 
 /** Especificação de exemplo usada nas asserções do prompt do juiz. */
 const sampleSpecification: TaskSpecification = {

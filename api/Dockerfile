@@ -57,4 +57,4 @@ RUN npm install --no-save prisma@6 tsx@4 \
 EXPOSE 3000
 USER node
 ENTRYPOINT ["dumb-init", "--", "./docker-entrypoint.sh"]
-CMD ["node", "dist/main"]
+CMD ["node", "dist/infra/main"]

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { HealthCheckService, HealthCheckResult } from '@nestjs/terminus';
 import { HealthController } from './health.controller';
-import { PrismaHealthIndicator } from '../infrastructure/prisma.health';
+import { PrismaHealthIndicator } from '../persistence/prisma.health';
 
 describe('HealthController', () => {
   it('deve retornar status ok quando o banco está saudável', async () => {

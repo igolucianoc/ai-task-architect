@@ -1,16 +1,16 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
-import { LLM_PROVIDER, LlmProvider } from './llm-provider.port';
-import { parseTaskSpecification, TaskSpecification } from './task-specification';
+import { LLM_PROVIDER, LlmProvider } from '../domain/llm-provider.port';
+import { parseTaskSpecification, TaskSpecification } from '../domain/task-specification';
 import { buildGenerationMessages } from './prompt-builder';
-import { AppLogger } from '../../../common/observability/app-logger';
-import { CORRELATION_ID_KEY } from '../../../common/observability/observability.constants';
-import { TasksRepository } from '../infrastructure/tasks.repository';
+import { AppLogger } from '../../../core/observability/app-logger';
+import { CORRELATION_ID_KEY } from '../../../core/observability/observability.constants';
+import { ITaskRepository, TASK_REPOSITORY } from '../domain/task.repository';
 import {
   buildEvent,
   type TaskGenerationEvent,
   type TaskGenerationEventListener,
-} from './task-generation-events';
+} from '../domain/task-generation-events';
 
 export interface GenerateTaskInput {
   taskId: string;
@@ -31,7 +31,7 @@ export class GenerateTaskSpecificationUseCase {
 
   constructor(
     @Inject(LLM_PROVIDER) private readonly llm: LlmProvider,
-    private readonly repository: TasksRepository,
+    @Inject(TASK_REPOSITORY) private readonly repository: ITaskRepository,
     private readonly logger: AppLogger,
     private readonly cls: ClsService,
   ) {}

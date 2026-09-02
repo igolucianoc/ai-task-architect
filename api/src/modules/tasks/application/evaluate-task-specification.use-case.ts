@@ -1,17 +1,17 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
-import { LLM_PROVIDER, LlmProvider } from './llm-provider.port';
-import { TaskSpecification } from './task-specification';
-import { AppLogger } from '../../../common/observability/app-logger';
-import { CORRELATION_ID_KEY } from '../../../common/observability/observability.constants';
+import { LLM_PROVIDER, LlmProvider } from '../domain/llm-provider.port';
+import { TaskSpecification } from '../domain/task-specification';
+import { AppLogger } from '../../../core/observability/app-logger';
+import { CORRELATION_ID_KEY } from '../../../core/observability/observability.constants';
 import {
   parseJudgeResponse,
   evaluateQualityGate,
   type EvaluationOutcome,
   type QualityGateResult,
-} from './task-evaluation';
+} from '../domain/task-evaluation';
 import { buildJudgeMessages, JUDGE_PROMPT_VERSION } from './judge-prompt';
-import { TasksRepository } from '../infrastructure/tasks.repository';
+import { ITaskRepository, TASK_REPOSITORY } from '../domain/task.repository';
 
 export interface EvaluateTaskInput {
   taskId: string;
@@ -40,7 +40,7 @@ export class EvaluateTaskSpecificationUseCase {
 
   constructor(
     @Inject(LLM_PROVIDER) private readonly llm: LlmProvider,
-    private readonly repository: TasksRepository,
+    @Inject(TASK_REPOSITORY) private readonly repository: ITaskRepository,
     private readonly logger: AppLogger,
     private readonly cls: ClsService,
   ) {}

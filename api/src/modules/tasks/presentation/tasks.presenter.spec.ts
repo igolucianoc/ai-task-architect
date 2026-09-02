@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { EvaluationStatus, LlmOperation, Prisma, TaskEvaluation, TaskStatus } from '@prisma/client';
 import { toTaskDetail, toTaskEvaluationView } from './tasks.presenter';
-import { LlmUsageForTask, TaskWithRelations } from '../infrastructure/tasks.repository';
+import { LlmUsageForTask, TaskWithRelations } from '../domain/task.repository';
 
 /** Avaliação com a relação `llmUsages` carregada (shape do findByIdForUser). */
 type EvaluationWithUsages = TaskEvaluation & { llmUsages: LlmUsageForTask[] };

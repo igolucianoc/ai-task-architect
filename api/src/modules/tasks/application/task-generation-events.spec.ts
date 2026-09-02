@@ -6,8 +6,8 @@ import {
   isTerminalEvent,
   type TaskGenerationEvent,
   type TaskGenerationEventName,
-} from './task-generation-events';
-import { type TaskSpecification } from './task-specification';
+} from '../domain/task-generation-events';
+import { type TaskSpecification } from '../domain/task-specification';
 
 const runId = 'run-123';
 

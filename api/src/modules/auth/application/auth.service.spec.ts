@@ -1,13 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
-import { User, RefreshSession } from '@prisma/client';
+import { RefreshSession } from '@prisma/client';
 import { AuthService } from './auth.service';
 import { UsersService } from '../../users/application/users.service';
+import { UserEntity, UserProps } from '../../users/domain/user.entity';
 import { TokenService } from './token.service';
 
-function makeUser(overrides: Partial<User> = {}): User {
-  return {
+function makeUser(overrides: Partial<UserProps> = {}): UserEntity {
+  return new UserEntity({
     id: 'user-1',
     email: 'ana@example.com',
     passwordHash: 'hash',
@@ -15,7 +16,7 @@ function makeUser(overrides: Partial<User> = {}): User {
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
-  };
+  });
 }
 
 function makeSession(overrides: Partial<RefreshSession> = {}): RefreshSession {

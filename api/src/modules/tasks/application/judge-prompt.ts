@@ -1,5 +1,5 @@
-import { LlmMessage } from './llm-provider.port';
-import { TaskSpecification } from './task-specification';
+import { LlmMessage } from '../domain/llm-provider.port';
+import { TaskSpecification } from '../domain/task-specification';
 
 /**
  * Versão do prompt do juiz. É persistida junto da avaliação para permitir

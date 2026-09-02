@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ClsService } from 'nestjs-cls';
 import { GenerateTaskSpecificationUseCase } from './generate-task-specification.use-case';
-import { FakeLlmProvider } from '../infrastructure/fake-llm.provider';
-import { TasksRepository } from '../infrastructure/tasks.repository';
-import { AppLogger } from '../../../common/observability/app-logger';
-import { type TaskGenerationEvent } from './task-generation-events';
+import { FakeLlmProvider } from '../infra/fake-llm.provider';
+import { ITaskRepository } from '../domain/task.repository';
+import { AppLogger } from '../../../core/observability/app-logger';
+import { type TaskGenerationEvent } from '../domain/task-generation-events';
 import { TaskGenerationRun } from '@prisma/client';
 
 /** Logger estruturado mockado — só precisamos que os métodos existam e não quebrem. */
@@ -58,7 +58,7 @@ describe('GenerateTaskSpecificationUseCase', () => {
     };
     useCase = new GenerateTaskSpecificationUseCase(
       provider,
-      repository as unknown as TasksRepository,
+      repository as unknown as ITaskRepository,
       makeLogger(),
       makeCls(),
     );
@@ -210,7 +210,7 @@ describe('GenerateTaskSpecificationUseCase', () => {
     } as unknown as ClsService;
     useCase = new GenerateTaskSpecificationUseCase(
       provider,
-      repository as unknown as TasksRepository,
+      repository as unknown as ITaskRepository,
       logger,
       cls,
     );

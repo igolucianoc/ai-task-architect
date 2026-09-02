@@ -40,6 +40,37 @@ própria, não para impressionar.
 
 ---
 
+## Organização de pastas (Clean Architecture + Vertical Slices)
+
+A API adota Clean Architecture com _vertical slices_ por módulo de negócio, com `core/` e `infra/`
+transversais. A regra de dependência aponta para dentro: `presentation → application → domain`, e a
+camada `persistence` implementa as interfaces de repositório definidas no `domain`. O `domain` não
+depende de framework.
+
+```
+src/
+├── core/                       # transversais de núcleo
+│   ├── config/                 # app.config (validado por Zod no boot)
+│   └── observability/          # app-logger, constants, observability.module
+├── infra/                      # transversais de infraestrutura
+│   ├── app.module.ts           # composição raiz
+│   ├── main.ts                 # bootstrap (entryFile → dist/infra/main)
+│   ├── database/prisma/        # PrismaService + PrismaModule
+│   └── http/                   # pipes (Zod), filtros, interceptors, throttler
+└── modules/<domínio>/
+    ├── application/            # use-cases + services
+    ├── domain/                 # entities, errors, interfaces de repositório (I{Entity}Repository)
+    ├── persistence/            # mappers + Prisma{Entity}Repository + InMemory{Entity}Repository
+    └── presentation/           # controllers, presenters, http/, schemas (Zod)
+```
+
+Cada repositório tem uma interface no `domain` (`I{Entity}Repository`) com um token de injeção
+(`Symbol`), implementada por um `Prisma{Entity}Repository` (produção) e um
+`InMemory{Entity}Repository` (testes/offline). Os módulos Nest ligam o token à implementação Prisma
+via `{ provide: TOKEN, useClass: Prisma... }`.
+
+---
+
 ## Módulos da API
 
 ### AuthModule

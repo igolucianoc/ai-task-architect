@@ -3,10 +3,10 @@ import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
-import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
-import { LLM_PROVIDER } from '../src/modules/tasks/application/llm-provider.port';
-import { FakeLlmProvider } from '../src/modules/tasks/infrastructure/fake-llm.provider';
+import { AppModule } from '../src/infra/app.module';
+import { PrismaService } from '../src/infra/database/prisma/prisma.service';
+import { LLM_PROVIDER } from '../src/modules/tasks/domain/llm-provider.port';
+import { FakeLlmProvider } from '../src/modules/tasks/infra/fake-llm.provider';
 
 /**
  * Handle da app E2E: a instância Nest, o PrismaService e o FakeLlmProvider

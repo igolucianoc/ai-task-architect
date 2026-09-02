@@ -35,6 +35,7 @@ Usar **NestJS** com TypeScript strict como framework de backend.
 - Curva de aprendizado de decorators e DI para quem lê o código pela primeira vez.
 - `@nestjs/testing` facilita testes unitários de módulos com providers mockados.
 - Estrutura de arquivos segue convenção NestJS (`*.module.ts`, `*.service.ts`, `*.controller.ts`),
-  organizada por módulo e camada em `src/modules/<módulo>/{application,infrastructure,presentation,schemas}`
-  (ver ADR-009). Pastas transversais (`config/`, `common/`, `prisma/`) ficam em `src/`.
+  organizada por módulo e camada em `src/modules/<módulo>/{application,domain,persistence,presentation}`
+  (ver ADR-009). Transversais ficam em `src/core/` (config, observability) e `src/infra/`
+  (database/prisma, http, `app.module`, `main`).
 - TypeScript strict ativo: sem `any`, sem `@ts-ignore`, inferência explícita obrigatória.

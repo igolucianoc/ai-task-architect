@@ -88,3 +88,30 @@ documentação oficial: https://huggingface.co/docs/huggingface.js/main/en/infer
 A camada de portas/adapters adiciona indireção para dois adapters (fake + HF). Justifica-se pelo
 requisito explícito de isolar o SDK e testar sem rede — e é o que torna a suíte de testes rápida e
 determinística.
+
+## Adendo (refatoração para Clean Architecture + Vertical Slices)
+
+**Status:** Aceito · atualiza a organização de camadas descrita acima sem alterar comportamento.
+
+A organização em quatro pastas (`application`/`infrastructure`/`presentation`/`schemas`) evoluiu
+para o padrão de referência do projeto — Clean Architecture com _vertical slices_ — preservando os
+mesmos endpoints, contratos e comportamento. As mudanças foram estruturais (movimentação e
+nomenclatura), não de regra de negócio:
+
+- **`domain/`** passa a conter os contratos e regras puras: `llm-provider.port.ts`,
+  `task-specification.ts`, `task-evaluation.ts`, `task-generation-events.ts` e a nova interface de
+  repositório `task.repository.ts` (`ITaskRepository` + token `TASK_REPOSITORY` + tipos de leitura).
+- **`persistence/`** substitui a antiga `infrastructure/` para dados: `tasks.repository.ts` virou
+  `PrismaTaskRepository` (implementando `ITaskRepository`) e ganhou um par `InMemoryTaskRepository`
+  para testes/offline.
+- **`infra/`** (no módulo) reúne os adapters técnicos: `huggingface.provider`, `fake-llm.provider`,
+  `evaluation.queue`, `evaluation.processor`.
+- **`presentation/`** mantém controller/presenter e passa a hospedar `schemas/` (Zod).
+- Os use-cases e o processor deixaram de depender da classe concreta do repositório e passaram a
+  injetar a interface via `@Inject(TASK_REPOSITORY)`, fechando a regra de dependência
+  `presentation → application → domain` com `persistence` implementando o `domain`.
+
+Os transversais saíram de `src/{config,common,prisma}` para `src/core/` (config, observability) e
+`src/infra/` (database/prisma, http, `app.module`, `main`). O `entryFile` do Nest passou a
+`infra/main` (refletido em `nest-cli.json`, `package.json` e `Dockerfile`). Os demais módulos
+(`auth`, `users`, `health`) seguem a mesma organização.

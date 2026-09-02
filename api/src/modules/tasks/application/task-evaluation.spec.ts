@@ -6,7 +6,7 @@ import {
   evaluateQualityGate,
   parseJudgeResponse,
   type EvaluationScores,
-} from './task-evaluation';
+} from '../domain/task-evaluation';
 
 const highScores: EvaluationScores = {
   clarity: 9,

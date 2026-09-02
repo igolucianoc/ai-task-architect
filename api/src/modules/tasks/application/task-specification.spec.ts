@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseTaskSpecification } from './task-specification';
+import { parseTaskSpecification } from '../domain/task-specification';
 
 const validSpec = {
   title: 'Autenticação com Google multi-tenant',

@@ -1,0 +1,39 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigType } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { appConfig } from '../core/config/app.config';
+import { HealthModule } from '../modules/health/health.module';
+import { PrismaModule } from './database/prisma/prisma.module';
+import { AuthModule } from '../modules/auth/auth.module';
+import { UsersModule } from '../modules/users/users.module';
+import { TasksModule } from '../modules/tasks/tasks.module';
+import { JwtAuthGuard } from '../modules/auth/presentation/http/jwt-auth.guard';
+import { buildThrottlerOptions } from './http/throttler.config';
+import { ObservabilityModule } from '../core/observability/observability.module';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      load: [appConfig],
+      envFilePath: ['.env.local', '.env'],
+    }),
+    ObservabilityModule,
+    ThrottlerModule.forRootAsync({
+      inject: [appConfig.KEY],
+      useFactory: (config: ConfigType<typeof appConfig>) => buildThrottlerOptions(config),
+    }),
+    PrismaModule,
+    HealthModule,
+    UsersModule,
+    AuthModule,
+    TasksModule,
+  ],
+  providers: [
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
+})
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- módulo raiz do NestJS
+export class AppModule {}

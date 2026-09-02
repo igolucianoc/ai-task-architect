@@ -20,26 +20,26 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigType } from '@nestjs/config';
 import { Observable, ReplaySubject, defer, from } from 'rxjs';
 import { TaskStatus } from '@prisma/client';
-import { appConfig } from '../../../config/app.config';
-import { Public } from '../../auth/infrastructure/public.decorator';
-import { CurrentUser } from '../../auth/infrastructure/current-user.decorator';
-import { AuthenticatedUser } from '../../auth/infrastructure/jwt.strategy';
+import { appConfig } from '../../../core/config/app.config';
+import { Public } from '../../auth/presentation/http/public.decorator';
+import { CurrentUser } from '../../auth/presentation/http/current-user.decorator';
+import { AuthenticatedUser } from '../../auth/presentation/http/jwt.strategy';
 import { AccessTokenPayload } from '../../auth/application/token.service';
-import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
+import { ZodValidationPipe } from '../../../infra/http/zod-validation.pipe';
 import { GenerateTaskSpecificationUseCase } from '../application/generate-task-specification.use-case';
-import { TasksRepository, TaskWithRelations } from '../infrastructure/tasks.repository';
-import { EvaluationQueue } from '../infrastructure/evaluation.queue';
+import { ITaskRepository, TASK_REPOSITORY, TaskWithRelations } from '../domain/task.repository';
+import { EvaluationQueue } from '../infra/evaluation.queue';
 import {
   buildEvent,
   isTerminalEvent,
   type TaskGenerationEvent,
-} from '../application/task-generation-events';
+} from '../domain/task-generation-events';
 import {
   createTaskSchema,
   CreateTaskDto,
   listTasksQuerySchema,
   ListTasksQueryDto,
-} from '../schemas/create-task.schema';
+} from './schemas/create-task.schema';
 import {
   toTaskCreated,
   toTaskDetail,
@@ -66,7 +66,7 @@ export class TasksController {
 
   constructor(
     private readonly generateTask: GenerateTaskSpecificationUseCase,
-    private readonly repository: TasksRepository,
+    @Inject(TASK_REPOSITORY) private readonly repository: ITaskRepository,
     private readonly jwt: JwtService,
     @Inject(appConfig.KEY)
     private readonly config: ConfigType<typeof appConfig>,

@@ -1,9 +1,9 @@
 import { Injectable, ConflictException, UnauthorizedException, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
-import { User } from '@prisma/client';
+import { UserEntity, PublicUser } from '../../users/domain/user.entity';
 import { UsersService } from '../../users/application/users.service';
 import { TokenService } from './token.service';
-import { RegisterDto, LoginDto } from '../schemas/auth.schemas';
+import { RegisterDto, LoginDto } from '../presentation/schemas/auth.schemas';
 
 const BCRYPT_COST = 12;
 
@@ -17,11 +17,7 @@ export interface AuthResult {
   tokens: AuthTokens;
 }
 
-export interface PublicUser {
-  id: string;
-  email: string;
-  displayName: string;
-}
+export type { PublicUser } from '../../users/domain/user.entity';
 
 @Injectable()
 export class AuthService {
@@ -101,18 +97,14 @@ export class AuthService {
     // Logout é idempotente: token inexistente ou já revogado não é erro.
   }
 
-  private async buildAuthResult(user: User, userAgent?: string): Promise<AuthResult> {
+  private async buildAuthResult(user: UserEntity, userAgent?: string): Promise<AuthResult> {
     const accessToken = this.tokens.signAccessToken({ sub: user.id, email: user.email });
     const { rawToken } = await this.tokens.issueRefreshToken(user.id, userAgent);
 
     return {
-      user: this.toPublicUser(user),
+      user: user.toPublicUser(),
       tokens: { accessToken, refreshToken: rawToken },
     };
-  }
-
-  private toPublicUser(user: User): PublicUser {
-    return { id: user.id, email: user.email, displayName: user.displayName };
   }
 }
 

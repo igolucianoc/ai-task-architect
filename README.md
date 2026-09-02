@@ -86,23 +86,25 @@ que roda com um único comando.
 ## Arquitetura
 
 Monorepo com dois aplicativos (`api/` e `web/`) e infraestrutura declarada em Docker Compose. A API
-segue uma arquitetura hexagonal por _feature slice_: cada módulo é organizado em `application`
-(casos de uso, portas, regras de domínio), `infrastructure` (Prisma, providers, fila/worker,
-guards), `presentation` (controllers, presenters) e `schemas` (validação de entrada).
+segue Clean Architecture com _vertical slices_ por módulo de negócio: cada módulo é organizado em
+`domain` (entities, regras e interfaces de repositório), `application` (casos de uso e serviços),
+`persistence` (mappers + repositórios Prisma/InMemory) e `presentation` (controllers, presenters,
+schemas Zod). Transversais ficam em `core/` (config, observabilidade) e `infra/` (Prisma, HTTP,
+bootstrap).
 
 ```
 ai-task-architect/
 ├── api/                 # API NestJS
 │   ├── src/
-│   │   ├── modules/
-│   │   │   ├── tasks/   #   geração + avaliação (application / infrastructure / presentation / schemas)
-│   │   │   ├── auth/    #   autenticação JWT (access + refresh)
-│   │   │   ├── users/   #   repositório de usuários
-│   │   │   └── health/  #   health check
-│   │   ├── config/      # configuração validada por Zod na inicialização
-│   │   └── common/      # pipes, filtros, throttler, observabilidade (transversais)
+│   │   ├── core/        #   config + observabilidade (transversais de núcleo)
+│   │   ├── infra/       #   database/prisma, http (pipes/filtros), app.module, main
+│   │   └── modules/
+│   │       ├── tasks/   #     geração + avaliação (domain / application / persistence / presentation / infra)
+│   │       ├── auth/    #     autenticação JWT (access + refresh)
+│   │       ├── users/   #     repositório de usuários
+│   │       └── health/  #     health check
 │   └── prisma/          # schema, migrations e seed
-├── web/                 # SPA Vue 3 (pages / components / composables / stores / services)
+├── web/                 # SPA Vue 3 (views / components / composables / stores / services)
 ├── docs/                # visão, arquitetura, modelo de domínio e ADRs
 └── docker-compose.yml   # PostgreSQL, Redis, API e Web
 ```

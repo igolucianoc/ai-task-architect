@@ -1,7 +1,7 @@
 import { EvaluationStatus, LlmOperation, Prisma, TaskEvaluation } from '@prisma/client';
 import { Task } from '@prisma/client';
-import { LlmUsageForTask, TaskWithRelations } from '../infrastructure/tasks.repository';
-import { TaskSpecification } from '../application/task-specification';
+import { LlmUsageForTask, TaskWithRelations } from '../domain/task.repository';
+import { TaskSpecification } from '../domain/task-specification';
 
 export interface TaskSummaryView {
   id: string;

@@ -2,9 +2,12 @@ import { Injectable, Inject } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigType } from '@nestjs/config';
 import { randomBytes, createHash } from 'node:crypto';
-import { RefreshSession } from '@prisma/client';
-import { PrismaService } from '../../../prisma/prisma.service';
-import { appConfig } from '../../../config/app.config';
+import { appConfig } from '../../../core/config/app.config';
+import { RefreshSessionEntity } from '../domain/refresh-session.entity';
+import {
+  IRefreshSessionRepository,
+  REFRESH_SESSION_REPOSITORY,
+} from '../domain/refresh-session.repository';
 
 export interface AccessTokenPayload {
   sub: string;
@@ -12,7 +15,7 @@ export interface AccessTokenPayload {
 }
 
 export interface IssuedRefreshToken {
-  session: RefreshSession;
+  session: RefreshSessionEntity;
   rawToken: string;
 }
 
@@ -20,7 +23,8 @@ export interface IssuedRefreshToken {
 export class TokenService {
   constructor(
     private readonly jwt: JwtService,
-    private readonly prisma: PrismaService,
+    @Inject(REFRESH_SESSION_REPOSITORY)
+    private readonly sessions: IRefreshSessionRepository,
     @Inject(appConfig.KEY)
     private readonly config: ConfigType<typeof appConfig>,
   ) {}
@@ -41,24 +45,22 @@ export class TokenService {
     const tokenHash = this.hashToken(rawToken);
     const expiresAt = new Date(Date.now() + this.config.refreshTokenTtlDays * 24 * 60 * 60 * 1000);
 
-    const session = await this.prisma.refreshSession.create({
-      data: { userId, tokenHash, userAgent: userAgent ?? null, expiresAt },
+    const session = await this.sessions.create({
+      userId,
+      tokenHash,
+      userAgent: userAgent ?? null,
+      expiresAt,
     });
 
     return { session, rawToken };
   }
 
-  findSessionByRawToken(rawToken: string): Promise<RefreshSession | null> {
-    return this.prisma.refreshSession.findUnique({
-      where: { tokenHash: this.hashToken(rawToken) },
-    });
+  findSessionByRawToken(rawToken: string): Promise<RefreshSessionEntity | null> {
+    return this.sessions.findByTokenHash(this.hashToken(rawToken));
   }
 
   async revokeSession(sessionId: string): Promise<void> {
-    await this.prisma.refreshSession.update({
-      where: { id: sessionId },
-      data: { revokedAt: new Date() },
-    });
+    await this.sessions.revokeById(sessionId, new Date());
   }
 
   /**
@@ -66,14 +68,11 @@ export class TokenService {
    * revogamos todas as sessões ativas do usuário como medida defensiva.
    */
   async revokeAllSessionsForUser(userId: string): Promise<void> {
-    await this.prisma.refreshSession.updateMany({
-      where: { userId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
+    await this.sessions.revokeAllActiveForUser(userId, new Date());
   }
 
-  isSessionActive(session: RefreshSession): boolean {
-    return session.revokedAt === null && session.expiresAt.getTime() > Date.now();
+  isSessionActive(session: RefreshSessionEntity): boolean {
+    return session.isActive();
   }
 
   private hashToken(rawToken: string): string {

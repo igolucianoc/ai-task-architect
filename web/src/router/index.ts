@@ -4,37 +4,37 @@ import { registerAuthGuard } from './guards';
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
-    component: () => import('@/pages/HomePage.vue'),
+    component: () => import('@/views/HomePage.vue'),
   },
   {
     path: '/login',
-    component: () => import('@/pages/LoginPage.vue'),
+    component: () => import('@/views/LoginPage.vue'),
     meta: { requiresGuest: true },
   },
   {
     path: '/register',
-    component: () => import('@/pages/RegisterPage.vue'),
+    component: () => import('@/views/RegisterPage.vue'),
     meta: { requiresGuest: true },
   },
   {
     path: '/tasks',
-    component: () => import('@/pages/TasksPage.vue'),
+    component: () => import('@/views/TasksPage.vue'),
     meta: { requiresAuth: true },
   },
   {
     // Rota estática declarada antes da dinâmica para casar '/tasks/new' com segurança.
     path: '/tasks/new',
-    component: () => import('@/pages/CreateTaskPage.vue'),
+    component: () => import('@/views/CreateTaskPage.vue'),
     meta: { requiresAuth: true },
   },
   {
     path: '/tasks/:id',
-    component: () => import('@/pages/TaskDetailPage.vue'),
+    component: () => import('@/views/TaskDetailPage.vue'),
     meta: { requiresAuth: true },
   },
   {
     path: '/:pathMatch(.*)*',
-    component: () => import('@/pages/NotFoundPage.vue'),
+    component: () => import('@/views/NotFoundPage.vue'),
   },
 ];
 

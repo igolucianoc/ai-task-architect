@@ -5,11 +5,11 @@ import { firstValueFrom, toArray } from 'rxjs';
 import { TaskStatus } from '@prisma/client';
 import { TasksController } from './tasks.controller';
 import { GenerateTaskSpecificationUseCase } from '../application/generate-task-specification.use-case';
-import { TasksRepository, TaskWithRelations } from '../infrastructure/tasks.repository';
-import { EvaluationQueue } from '../infrastructure/evaluation.queue';
-import { AuthenticatedUser } from '../../auth/infrastructure/jwt.strategy';
-import { buildEvent, type TaskGenerationEvent } from '../application/task-generation-events';
-import { type TaskSpecification } from '../application/task-specification';
+import { ITaskRepository, TaskWithRelations } from '../domain/task.repository';
+import { EvaluationQueue } from '../infra/evaluation.queue';
+import { AuthenticatedUser } from '../../auth/presentation/http/jwt.strategy';
+import { buildEvent, type TaskGenerationEvent } from '../domain/task-generation-events';
+import { type TaskSpecification } from '../domain/task-specification';
 
 const USER: AuthenticatedUser = {
   id: 'user-1',
@@ -78,7 +78,7 @@ describe('TasksController', () => {
     evaluationQueue = { enqueue: vi.fn().mockResolvedValue(undefined) };
     controller = new TasksController(
       generateTask as unknown as GenerateTaskSpecificationUseCase,
-      repository as unknown as TasksRepository,
+      repository as unknown as ITaskRepository,
       jwt as unknown as JwtService,
       { jwtSecret: 'segredo-de-teste-com-32-caracteres-ok' } as never,
       evaluationQueue as unknown as EvaluationQueue,

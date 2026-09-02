@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ClsService } from 'nestjs-cls';
 import { EvaluateTaskSpecificationUseCase } from './evaluate-task-specification.use-case';
-import { FakeLlmProvider } from '../infrastructure/fake-llm.provider';
-import { TasksRepository } from '../infrastructure/tasks.repository';
-import { AppLogger } from '../../../common/observability/app-logger';
-import { type TaskSpecification } from './task-specification';
+import { FakeLlmProvider } from '../infra/fake-llm.provider';
+import { ITaskRepository } from '../domain/task.repository';
+import { AppLogger } from '../../../core/observability/app-logger';
+import { type TaskSpecification } from '../domain/task-specification';
 
 /** Logger estruturado mockado — só precisamos que os métodos existam e não quebrem. */
 function makeLogger(): AppLogger {
@@ -58,7 +58,7 @@ describe('EvaluateTaskSpecificationUseCase', () => {
     };
     useCase = new EvaluateTaskSpecificationUseCase(
       provider,
-      repository as unknown as TasksRepository,
+      repository as unknown as ITaskRepository,
       makeLogger(),
       makeCls(),
     );
@@ -170,7 +170,7 @@ describe('EvaluateTaskSpecificationUseCase', () => {
     } as unknown as ClsService;
     useCase = new EvaluateTaskSpecificationUseCase(
       provider,
-      repository as unknown as TasksRepository,
+      repository as unknown as ITaskRepository,
       logger,
       cls,
     );

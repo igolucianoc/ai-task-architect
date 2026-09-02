@@ -1,4 +1,4 @@
-import { LlmMessage } from './llm-provider.port';
+import { LlmMessage } from '../domain/llm-provider.port';
 
 /**
  * Monta as mensagens enviadas ao LLM para gerar uma especificação técnica.
