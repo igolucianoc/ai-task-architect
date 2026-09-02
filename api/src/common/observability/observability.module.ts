@@ -40,11 +40,12 @@ function readIncomingCorrelationId(req: Request): string | undefined {
       global: true,
       middleware: {
         mount: true,
-        // Reaproveita o header de entrada quando presente; senão gera um UUID v4.
-        idGenerator: (req: Request): string => readIncomingCorrelationId(req) ?? randomUUID(),
-        // Armazena o id sob uma chave estável para leitura em qualquer ponto do request.
+        // Armazena o correlation id sob uma chave estável para leitura em
+        // qualquer ponto do request. Reaproveita o header de entrada quando
+        // presente; senão gera um UUID v4 aqui mesmo — não dependemos de
+        // `cls.getId()` para evitar acoplamento com a ordem interna do middleware.
         setup: (cls: ClsService, req: Request): void => {
-          cls.set(CORRELATION_ID_KEY, readIncomingCorrelationId(req) ?? cls.getId());
+          cls.set(CORRELATION_ID_KEY, readIncomingCorrelationId(req) ?? randomUUID());
         },
       },
     }),
