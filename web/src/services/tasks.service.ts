@@ -13,6 +13,44 @@ export interface TaskSummary {
   updatedAt: string;
 }
 
+/**
+ * Métricas de uso de LLM de uma run (geração). `estimatedCost` vem como number.
+ * Espelha `LlmUsageView` do backend. Estes "tokens" são contadores de uso do
+ * LLM — não há nada sensível.
+ */
+export interface LlmUsageView {
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  latencyMs: number;
+  estimatedCost: number;
+}
+
+/**
+ * Métricas de uso de LLM da avaliação. O `model` já é exposto no nível da
+ * avaliação (`TaskEvaluationView.model`), então não é repetido aqui. Espelha
+ * `EvaluationUsageView` do backend.
+ */
+export interface EvaluationUsageView {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  latencyMs: number;
+  estimatedCost: number;
+}
+
+/**
+ * Agregado de uso de LLM de toda a tarefa (geração + avaliação). Zeros quando
+ * não há nenhum uso registrado. Espelha `LlmTotalsView` do backend.
+ */
+export interface LlmTotalsView {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  estimatedCost: number;
+}
+
 /** Visão de avaliação de uma tarefa. */
 export interface TaskEvaluationView {
   status: string;
@@ -24,6 +62,7 @@ export interface TaskEvaluationView {
   model: string | null;
   promptVersion: string | null;
   evaluatedAt: string | null;
+  usage: EvaluationUsageView | null;
 }
 
 /** Dados da última execução (run) de geração de uma tarefa. */
@@ -33,6 +72,7 @@ export interface TaskLastRun {
   errorMessage: string | null;
   startedAt: string;
   finishedAt: string | null;
+  usage: LlmUsageView | null;
 }
 
 /** Detalhe completo de uma tarefa. */
@@ -40,6 +80,7 @@ export type TaskDetail = TaskSummary & {
   specification: TaskSpecification | null;
   lastRun: TaskLastRun | null;
   evaluation: TaskEvaluationView | null;
+  llmTotals: LlmTotalsView;
 };
 
 /** Página de tarefas retornada por `GET /api/tasks`. */

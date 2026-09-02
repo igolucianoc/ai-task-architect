@@ -8,6 +8,7 @@ import {
   LlmOperation,
   TaskEvaluation,
   EvaluationStatus,
+  LlmUsage,
   Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -26,15 +27,32 @@ export interface TaskEvaluationSource {
   specification: TaskSpecification;
 }
 
+/**
+ * Campos de uso de LLM carregados junto das runs e da avaliação para
+ * observabilidade (tokens, latência e custo). Mantém apenas o que o presenter
+ * expõe — nunca inclui nada sensível (o token de acesso não vive aqui).
+ */
+export type LlmUsageForTask = Pick<
+  LlmUsage,
+  | 'operation'
+  | 'model'
+  | 'promptTokens'
+  | 'completionTokens'
+  | 'totalTokens'
+  | 'latencyMs'
+  | 'estimatedCost'
+>;
+
 export interface TaskWithRelations extends Task {
   artifacts: { id: string; content: string; contentFormat: string; createdAt: Date }[];
-  generationRuns: Pick<
+  generationRuns: (Pick<
     TaskGenerationRun,
     'id' | 'status' | 'model' | 'errorMessage' | 'startedAt' | 'finishedAt'
-  >[];
+  > & { llmUsages: LlmUsageForTask[] })[];
   // Avaliação assíncrona (LLM-as-Judge): persistida pelo worker DEPOIS que o
-  // stream SSE já encerrou. Fica `null` até a avaliação ser concluída.
-  evaluation: TaskEvaluation | null;
+  // stream SSE já encerrou. Fica `null` até a avaliação ser concluída. Carrega
+  // também os usos de LLM (operation EVALUATION) vinculados à avaliação.
+  evaluation: (TaskEvaluation & { llmUsages: LlmUsageForTask[] }) | null;
 }
 
 export interface SuccessfulRunInput {
@@ -346,12 +364,41 @@ export class TasksRepository {
             errorMessage: true,
             startedAt: true,
             finishedAt: true,
+            // Uso de LLM da run (normalmente 1 de GENERATION) para expor tokens,
+            // latência e custo na observabilidade.
+            llmUsages: {
+              select: {
+                operation: true,
+                model: true,
+                promptTokens: true,
+                completionTokens: true,
+                totalTokens: true,
+                latencyMs: true,
+                estimatedCost: true,
+              },
+            },
           },
           orderBy: { startedAt: 'desc' },
         },
         // A avaliação é obtida por este GET (não pelo stream): o worker de
         // avaliação a persiste de forma assíncrona após a geração concluir.
-        evaluation: true,
+        // `include` traz todos os campos escalares da avaliação (usados pelo
+        // presenter) mais os usos de LLM (operation EVALUATION) vinculados.
+        evaluation: {
+          include: {
+            llmUsages: {
+              select: {
+                operation: true,
+                model: true,
+                promptTokens: true,
+                completionTokens: true,
+                totalTokens: true,
+                latencyMs: true,
+                estimatedCost: true,
+              },
+            },
+          },
+        },
       },
     });
   }

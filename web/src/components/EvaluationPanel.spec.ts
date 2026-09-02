@@ -14,6 +14,7 @@ function makeEvaluation(overrides: Partial<TaskEvaluationView> = {}): TaskEvalua
     model: 'gpt-4o',
     promptVersion: 'v1',
     evaluatedAt: '2024-02-05T14:30:00-03:00',
+    usage: null,
     ...overrides,
   };
 }

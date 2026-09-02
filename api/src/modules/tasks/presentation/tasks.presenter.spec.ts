@@ -1,10 +1,27 @@
 import { describe, it, expect } from 'vitest';
-import { EvaluationStatus, Prisma, TaskEvaluation, TaskStatus } from '@prisma/client';
+import { EvaluationStatus, LlmOperation, Prisma, TaskEvaluation, TaskStatus } from '@prisma/client';
 import { toTaskDetail, toTaskEvaluationView } from './tasks.presenter';
-import { TaskWithRelations } from '../infrastructure/tasks.repository';
+import { LlmUsageForTask, TaskWithRelations } from '../infrastructure/tasks.repository';
 
-/** Cria uma TaskEvaluation completa, permitindo sobrescrever campos. */
-function makeEvaluation(overrides: Partial<TaskEvaluation> = {}): TaskEvaluation {
+/** Avaliação com a relação `llmUsages` carregada (shape do findByIdForUser). */
+type EvaluationWithUsages = TaskEvaluation & { llmUsages: LlmUsageForTask[] };
+
+/** Cria um uso de LLM, permitindo sobrescrever campos. */
+function makeUsage(overrides: Partial<LlmUsageForTask> = {}): LlmUsageForTask {
+  return {
+    operation: LlmOperation.GENERATION,
+    model: 'fake-model',
+    promptTokens: 100,
+    completionTokens: 40,
+    totalTokens: 140,
+    latencyMs: 1200,
+    estimatedCost: new Prisma.Decimal('0.001500'),
+    ...overrides,
+  };
+}
+
+/** Cria uma TaskEvaluation completa (com llmUsages), permitindo sobrescrever. */
+function makeEvaluation(overrides: Partial<EvaluationWithUsages> = {}): EvaluationWithUsages {
   return {
     id: 'eval-1',
     taskId: 'task-1',
@@ -28,6 +45,7 @@ function makeEvaluation(overrides: Partial<TaskEvaluation> = {}): TaskEvaluation
     model: 'fake-judge',
     createdAt: new Date('2024-01-01T00:00:00.000Z'),
     updatedAt: new Date('2024-01-02T10:20:30.000Z'),
+    llmUsages: [],
     ...overrides,
   };
 }
@@ -72,6 +90,42 @@ describe('toTaskEvaluationView', () => {
     expect(view?.model).toBe('fake-judge');
     expect(view?.promptVersion).toBe('judge-v1');
     expect(view?.evaluatedAt).toBe('2024-01-02T10:20:30.000Z');
+    expect(view?.usage).toBeNull();
+  });
+
+  it('expõe usage (EVALUATION) da avaliação, com estimatedCost como number', () => {
+    const view = toTaskEvaluationView(
+      makeEvaluation({
+        llmUsages: [
+          makeUsage({
+            operation: LlmOperation.EVALUATION,
+            promptTokens: 200,
+            completionTokens: 30,
+            totalTokens: 230,
+            latencyMs: 900,
+            estimatedCost: new Prisma.Decimal('0.002500'),
+          }),
+        ],
+      }),
+    );
+
+    expect(view?.usage).toEqual({
+      promptTokens: 200,
+      completionTokens: 30,
+      totalTokens: 230,
+      latencyMs: 900,
+      estimatedCost: 0.0025,
+    });
+  });
+
+  it('ignora usos que não sejam de EVALUATION ao montar usage da avaliação', () => {
+    const view = toTaskEvaluationView(
+      makeEvaluation({
+        llmUsages: [makeUsage({ operation: LlmOperation.GENERATION })],
+      }),
+    );
+
+    expect(view?.usage).toBeNull();
   });
 
   it('preenche reasons quando a avaliação foi REJEITADA', () => {
@@ -163,6 +217,23 @@ describe('toTaskEvaluationView', () => {
   });
 });
 
+/** Tipo de uma run já com a relação `llmUsages` (shape do findByIdForUser). */
+type RunWithUsages = TaskWithRelations['generationRuns'][number];
+
+/** Cria uma run com llmUsages, permitindo sobrescrever campos. */
+function makeRun(overrides: Partial<RunWithUsages> = {}): RunWithUsages {
+  return {
+    id: 'run-1',
+    status: 'SUCCEEDED',
+    model: 'fake-model',
+    errorMessage: null,
+    startedAt: new Date('2024-01-01T00:00:00.000Z'),
+    finishedAt: new Date('2024-01-01T00:01:00.000Z'),
+    llmUsages: [],
+    ...overrides,
+  };
+}
+
 describe('toTaskDetail', () => {
   it('inclui evaluation null quando a task ainda não foi avaliada', () => {
     const view = toTaskDetail(makeTask({ evaluation: null }));
@@ -176,5 +247,121 @@ describe('toTaskDetail', () => {
     expect(view.evaluation).not.toBeNull();
     expect(view.evaluation?.status).toBe('COMPLETED');
     expect(view.evaluation?.overallScore).toBe(8.33);
+  });
+
+  it('lastRun.usage é null e llmTotals zerado quando não há nenhum uso', () => {
+    const view = toTaskDetail(makeTask({ generationRuns: [makeRun()], evaluation: null }));
+
+    expect(view.lastRun?.usage).toBeNull();
+    expect(view.llmTotals).toEqual({
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      estimatedCost: 0,
+    });
+  });
+
+  it('expõe lastRun.usage com estimatedCost como number', () => {
+    const view = toTaskDetail(
+      makeTask({
+        generationRuns: [
+          makeRun({
+            llmUsages: [
+              makeUsage({
+                promptTokens: 100,
+                completionTokens: 40,
+                totalTokens: 140,
+                latencyMs: 1200,
+                estimatedCost: new Prisma.Decimal('0.001500'),
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+
+    expect(view.lastRun?.usage).toEqual({
+      model: 'fake-model',
+      promptTokens: 100,
+      completionTokens: 40,
+      totalTokens: 140,
+      latencyMs: 1200,
+      estimatedCost: 0.0015,
+    });
+  });
+
+  it('agrega múltiplos usos de uma run: soma tokens/custo, maior latência, model do primeiro', () => {
+    const view = toTaskDetail(
+      makeTask({
+        generationRuns: [
+          makeRun({
+            llmUsages: [
+              makeUsage({
+                model: 'model-a',
+                promptTokens: 100,
+                completionTokens: 40,
+                totalTokens: 140,
+                latencyMs: 1200,
+                estimatedCost: new Prisma.Decimal('0.001000'),
+              }),
+              makeUsage({
+                model: 'model-b',
+                promptTokens: 50,
+                completionTokens: 10,
+                totalTokens: 60,
+                latencyMs: 800,
+                estimatedCost: new Prisma.Decimal('0.000500'),
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+
+    expect(view.lastRun?.usage).toEqual({
+      model: 'model-a',
+      promptTokens: 150,
+      completionTokens: 50,
+      totalTokens: 200,
+      latencyMs: 1200,
+      estimatedCost: 0.0015,
+    });
+  });
+
+  it('llmTotals soma TODOS os usos (geração + avaliação)', () => {
+    const view = toTaskDetail(
+      makeTask({
+        generationRuns: [
+          makeRun({
+            llmUsages: [
+              makeUsage({
+                promptTokens: 100,
+                completionTokens: 40,
+                totalTokens: 140,
+                estimatedCost: new Prisma.Decimal('0.001000'),
+              }),
+            ],
+          }),
+        ],
+        evaluation: makeEvaluation({
+          llmUsages: [
+            makeUsage({
+              operation: LlmOperation.EVALUATION,
+              promptTokens: 200,
+              completionTokens: 30,
+              totalTokens: 230,
+              estimatedCost: new Prisma.Decimal('0.002000'),
+            }),
+          ],
+        }),
+      }),
+    );
+
+    expect(view.llmTotals).toEqual({
+      promptTokens: 300,
+      completionTokens: 70,
+      totalTokens: 370,
+      estimatedCost: 0.003,
+    });
   });
 });

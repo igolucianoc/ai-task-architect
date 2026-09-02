@@ -110,6 +110,7 @@ function makeDetail(overrides: Partial<TaskDetail> = {}): TaskDetail {
     specification: null,
     lastRun: null,
     evaluation: null,
+    llmTotals: { promptTokens: 0, completionTokens: 0, totalTokens: 0, estimatedCost: 0 },
     ...overrides,
   };
 }
@@ -192,6 +193,7 @@ describe('TaskDetailPage', () => {
           model: 'gpt-4o',
           promptVersion: 'v1',
           evaluatedAt: '2024-02-05T14:31:00-03:00',
+          usage: null,
         },
       });
       return Promise.resolve();

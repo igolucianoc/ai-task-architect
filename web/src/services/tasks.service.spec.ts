@@ -56,6 +56,7 @@ describe('tasks.service', () => {
       specification: null,
       lastRun: null,
       evaluation: null,
+      llmTotals: { promptTokens: 0, completionTokens: 0, totalTokens: 0, estimatedCost: 0 },
     };
     client.get.mockResolvedValue(detail);
 
