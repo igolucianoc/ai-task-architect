@@ -15,6 +15,8 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['test/**/*.e2e-spec.ts'],
+    // Isola os E2E num banco dedicado ANTES de o AppModule carregar a config.
+    setupFiles: ['test/e2e-setup.ts'],
     // Fluxos E2E compartilham estado (usuário, tokens, taskId) e o banco, então
     // rodam em sequência — sem paralelismo entre arquivos.
     fileParallelism: false,
