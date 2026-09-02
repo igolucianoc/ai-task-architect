@@ -6,7 +6,7 @@ import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import { ApiError } from '@/services/http-client';
 import { httpClient } from '@/services/http-client-instance';
-import { createTask, getTask, listTasks } from '@/services/tasks.service';
+import { createTask, deleteTask, getTask, listTasks } from '@/services/tasks.service';
 import type { TaskDetail, TaskSummary } from '@/services/tasks.service';
 
 /** Tamanho de página padrão da listagem. */
@@ -36,6 +36,11 @@ export const useTasksStore = defineStore('tasks', () => {
   const current = ref<TaskDetail | null>(null);
   const isLoadingDetail = ref<boolean>(false);
   const detailError = ref<string | null>(null);
+
+  // --- Estado: exclusão ---
+  // Id da tarefa em processo de exclusão (para desabilitar a ação daquele item).
+  const deletingId = ref<string | null>(null);
+  const deleteError = ref<string | null>(null);
 
   // --- Getters ---
   const totalPages = computed(() =>
@@ -94,6 +99,32 @@ export const useTasksStore = defineStore('tasks', () => {
     }
   }
 
+  /**
+   * Exclui uma tarefa por id. Em sucesso, remove o item da listagem local e
+   * ajusta o total, além de limpar `current` se for a tarefa aberta. Retorna
+   * `true` em sucesso e `false` em erro (o componente decide o feedback).
+   */
+  async function remove(id: string): Promise<boolean> {
+    deletingId.value = id;
+    deleteError.value = null;
+    try {
+      await deleteTask(httpClient, id);
+      items.value = items.value.filter((task) => task.id !== id);
+      if (total.value > 0) {
+        total.value -= 1;
+      }
+      if (current.value?.id === id) {
+        current.value = null;
+      }
+      return true;
+    } catch (err) {
+      deleteError.value = toErrorMessage(err);
+      return false;
+    } finally {
+      deletingId.value = null;
+    }
+  }
+
   return {
     // estado: listagem
     items,
@@ -106,11 +137,15 @@ export const useTasksStore = defineStore('tasks', () => {
     current,
     isLoadingDetail,
     detailError,
+    // estado: exclusão
+    deletingId,
+    deleteError,
     // getters
     totalPages,
     // actions
     fetchList,
     fetchDetail,
     create,
+    remove,
   };
 });

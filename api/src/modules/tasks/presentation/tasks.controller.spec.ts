@@ -60,6 +60,7 @@ describe('TasksController', () => {
     createPendingTask: ReturnType<typeof vi.fn>;
     findByIdForUser: ReturnType<typeof vi.fn>;
     listForUser: ReturnType<typeof vi.fn>;
+    deleteForUser: ReturnType<typeof vi.fn>;
   };
   let jwt: { verify: ReturnType<typeof vi.fn> };
   let evaluationQueue: { enqueue: ReturnType<typeof vi.fn> };
@@ -71,6 +72,7 @@ describe('TasksController', () => {
       createPendingTask: vi.fn(),
       findByIdForUser: vi.fn(),
       listForUser: vi.fn(),
+      deleteForUser: vi.fn(),
     };
     jwt = { verify: vi.fn() };
     evaluationQueue = { enqueue: vi.fn().mockResolvedValue(undefined) };
@@ -92,6 +94,22 @@ describe('TasksController', () => {
       expect(result).toEqual({ taskId: 'task-1', status: TaskStatus.PENDING });
       expect(repository.createPendingTask).toHaveBeenCalledWith('user-1', 'x'.repeat(60));
       expect(generateTask.execute).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('DELETE /tasks/:id', () => {
+    it('exclui a tarefa do usuário e resolve sem retorno', async () => {
+      repository.deleteForUser.mockResolvedValue(true);
+
+      await expect(controller.remove('task-1', USER)).resolves.toBeUndefined();
+      expect(repository.deleteForUser).toHaveBeenCalledWith('task-1', 'user-1');
+    });
+
+    it('lança 404 quando a tarefa não existe ou não é do usuário', async () => {
+      repository.deleteForUser.mockResolvedValue(false);
+
+      await expect(controller.remove('task-1', USER)).rejects.toBeInstanceOf(NotFoundException);
+      expect(repository.deleteForUser).toHaveBeenCalledWith('task-1', 'user-1');
     });
   });
 

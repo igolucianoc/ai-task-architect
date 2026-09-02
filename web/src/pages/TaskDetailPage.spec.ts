@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/vue';
+import userEvent from '@testing-library/user-event';
 import { flushPromises } from '@vue/test-utils';
 import { defineComponent, h, ref, readonly } from 'vue';
 import type { StreamStatus } from '@/composables/useTaskGenerationStream';
@@ -7,9 +8,11 @@ import type { TaskGenerationEvent, TaskSpecification } from '@/services/task-eve
 import type { TaskDetail } from '@/services/tasks.service';
 import TaskDetailPage from './TaskDetailPage.vue';
 
-// --- Mock do router: useRoute com id fixo + RouterLink stub navegável. ---
+// --- Mock do router: useRoute com id fixo + useRouter navegável + RouterLink. ---
+const routerPush = vi.fn();
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { id: 'task-1' } }),
+  useRouter: () => ({ push: routerPush }),
   RouterLink: defineComponent({
     props: { to: { type: [String, Object], required: true } },
     setup:
@@ -24,7 +27,10 @@ const tasks = {
   current: ref<TaskDetail | null>(null),
   isLoadingDetail: ref(false),
   detailError: ref<string | null>(null),
+  deletingId: ref<string | null>(null),
+  deleteError: ref<string | null>(null),
   fetchDetail: vi.fn<(id: string) => Promise<void>>(),
+  remove: vi.fn<(id: string) => Promise<boolean>>(),
 };
 
 vi.mock('@/stores/tasks.store', () => ({
@@ -51,6 +57,8 @@ vi.mock('pinia', () => ({
     current: store.current,
     isLoadingDetail: store.isLoadingDetail,
     detailError: store.detailError,
+    deletingId: store.deletingId,
+    deleteError: store.deleteError,
   }),
 }));
 
@@ -111,8 +119,13 @@ describe('TaskDetailPage', () => {
     tasks.current.value = makeDetail();
     tasks.isLoadingDetail.value = false;
     tasks.detailError.value = null;
+    tasks.deletingId.value = null;
+    tasks.deleteError.value = null;
     tasks.fetchDetail.mockReset();
     tasks.fetchDetail.mockResolvedValue(undefined);
+    tasks.remove.mockReset();
+    tasks.remove.mockResolvedValue(true);
+    routerPush.mockReset();
 
     accessTokenRef.value = 'token-abc';
 
@@ -208,6 +221,36 @@ describe('TaskDetailPage', () => {
       'href',
       '/tasks',
     );
+  });
+
+  it('deve excluir a tarefa e voltar para a listagem ao confirmar', async () => {
+    const user = userEvent.setup();
+    render(TaskDetailPage);
+    await flushPromises();
+
+    // Abre o diálogo de confirmação pelo botão de lixeira.
+    await user.click(screen.getByRole('button', { name: 'Excluir tarefa' }));
+
+    // Confirma a exclusão no diálogo.
+    await user.click(screen.getByRole('button', { name: 'Excluir' }));
+    await flushPromises();
+
+    expect(tasks.remove).toHaveBeenCalledWith('task-1');
+    expect(routerPush).toHaveBeenCalledWith('/tasks');
+  });
+
+  it('não deve navegar quando a exclusão falha', async () => {
+    tasks.remove.mockResolvedValue(false);
+    const user = userEvent.setup();
+    render(TaskDetailPage);
+    await flushPromises();
+
+    await user.click(screen.getByRole('button', { name: 'Excluir tarefa' }));
+    await user.click(screen.getByRole('button', { name: 'Excluir' }));
+    await flushPromises();
+
+    expect(tasks.remove).toHaveBeenCalledWith('task-1');
+    expect(routerPush).not.toHaveBeenCalled();
   });
 
   it('deve mostrar erro e não iniciar o stream quando não há token', async () => {

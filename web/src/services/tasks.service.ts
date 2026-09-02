@@ -75,3 +75,8 @@ export function listTasks(
 export function getTask(client: HttpClient, id: string): Promise<TaskDetail> {
   return client.get<TaskDetail>(`/api/tasks/${encodeURIComponent(id)}`);
 }
+
+/** Exclui uma tarefa por id. Backend responde 204 sem corpo. */
+export function deleteTask(client: HttpClient, id: string): Promise<void> {
+  return client.request<void>(`/api/tasks/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}

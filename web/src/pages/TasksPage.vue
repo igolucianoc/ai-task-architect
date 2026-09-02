@@ -1,17 +1,53 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { RouterLink } from 'vue-router';
 import { useTasksStore } from '@/stores/tasks.store';
+import type { TaskSummary } from '@/services/tasks.service';
 import { formatDate } from '@/utils/format-date';
 import AppSpinner from '@/components/AppSpinner.vue';
 import BaseButton from '@/components/BaseButton.vue';
 import BaseCard from '@/components/BaseCard.vue';
+import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import TaskStatusBadge from '@/components/TaskStatusBadge.vue';
 
 // Página é UI: orquestra a store (listagem paginada), sem HTTP direto.
 const tasksStore = useTasksStore();
-const { items, page, totalPages, isLoading, error } = storeToRefs(tasksStore);
+const { items, page, totalPages, isLoading, error, deletingId, deleteError } =
+  storeToRefs(tasksStore);
+
+// --- Exclusão ---
+// Tarefa marcada para exclusão (abre o diálogo de confirmação).
+const taskToDelete = ref<TaskSummary | null>(null);
+const isConfirmOpen = computed({
+  get: () => taskToDelete.value !== null,
+  set: (open: boolean) => {
+    if (!open) {
+      taskToDelete.value = null;
+    }
+  },
+});
+
+// Está excluindo justamente a tarefa em confirmação.
+const isDeleting = computed(
+  () => taskToDelete.value !== null && deletingId.value === taskToDelete.value.id,
+);
+
+// Abre o diálogo para a tarefa escolhida.
+function askDelete(task: TaskSummary): void {
+  taskToDelete.value = task;
+}
+
+// Confirma a exclusão; fecha o diálogo somente em caso de sucesso.
+async function confirmDelete(): Promise<void> {
+  if (taskToDelete.value === null) {
+    return;
+  }
+  const ok = await tasksStore.remove(taskToDelete.value.id);
+  if (ok) {
+    taskToDelete.value = null;
+  }
+}
 
 // Carrega a primeira página ao montar.
 onMounted(() => {
@@ -71,6 +107,8 @@ function goToNext(): void {
 
     <!-- Estado: sucesso -->
     <template v-else>
+      <p v-if="deleteError" role="alert" class="tasks-page__error">{{ deleteError }}</p>
+
       <ul class="tasks-page__list">
         <li v-for="task in items" :key="task.id" class="tasks-page__item">
           <RouterLink :to="`/tasks/${task.id}`" class="tasks-page__item-link">
@@ -82,8 +120,43 @@ function goToNext(): void {
               </time>
             </span>
           </RouterLink>
+          <button
+            type="button"
+            class="tasks-page__delete"
+            :disabled="deletingId === task.id"
+            :aria-label="`Excluir tarefa: ${task.description}`"
+            @click="askDelete(task)"
+          >
+            <svg
+              class="tasks-page__delete-icon"
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m2 0v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7m4 4v6m4-6v6"
+              />
+            </svg>
+          </button>
         </li>
       </ul>
+
+      <ConfirmDialog
+        v-model:open="isConfirmOpen"
+        title="Excluir tarefa"
+        message="Tem certeza que deseja excluir esta tarefa? Esta ação não pode ser desfeita."
+        confirm-label="Excluir"
+        cancel-label="Cancelar"
+        :loading="isDeleting"
+        @confirm="confirmDelete"
+      />
 
       <nav v-if="totalPages > 1" class="tasks-page__pagination" aria-label="Paginação">
         <BaseButton variant="secondary" type="button" :disabled="page <= 1" @click="goToPrevious">
@@ -168,8 +241,16 @@ function goToNext(): void {
   list-style: none;
 }
 
+.tasks-page__item {
+  display: flex;
+  align-items: stretch;
+  gap: var(--spacing-8);
+}
+
 .tasks-page__item-link {
   display: flex;
+  flex: 1;
+  min-width: 0;
   flex-direction: column;
   gap: var(--spacing-8);
   padding: var(--spacing-16);
@@ -181,6 +262,44 @@ function goToNext(): void {
 
 .tasks-page__item-link:hover {
   border-color: var(--color-spark-blue);
+}
+
+/* Botão de lixeira: outline neutro que fica vermelho no hover/foco. */
+.tasks-page__delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 44px;
+  padding: 0;
+  border: 2px solid var(--color-faded-gray);
+  border-radius: var(--radius-xl);
+  background-color: var(--color-paper-white);
+  color: var(--color-pencil-gray);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.tasks-page__delete:hover:not(:disabled),
+.tasks-page__delete:focus-visible:not(:disabled) {
+  color: var(--color-night-ink);
+  border-color: var(--color-night-ink);
+}
+
+.tasks-page__delete:focus-visible {
+  outline: 2px solid var(--color-spark-blue);
+  outline-offset: 2px;
+}
+
+.tasks-page__delete:disabled {
+  cursor: not-allowed;
+  color: var(--color-faded-gray);
+}
+
+.tasks-page__delete-icon {
+  display: block;
 }
 
 .tasks-page__item-description {

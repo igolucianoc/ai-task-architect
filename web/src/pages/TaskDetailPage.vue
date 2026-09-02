@@ -15,7 +15,7 @@
 
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { RouterLink, useRoute } from 'vue-router';
+import { RouterLink, useRoute, useRouter } from 'vue-router';
 import { useTasksStore } from '@/stores/tasks.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useTaskGenerationStream } from '@/composables/useTaskGenerationStream';
@@ -23,6 +23,7 @@ import { formatDate } from '@/utils/format-date';
 import AppSpinner from '@/components/AppSpinner.vue';
 import BaseButton from '@/components/BaseButton.vue';
 import BaseCard from '@/components/BaseCard.vue';
+import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import TaskStatusBadge from '@/components/TaskStatusBadge.vue';
 import GenerationProgress from '@/components/GenerationProgress.vue';
 import SpecificationView from '@/components/SpecificationView.vue';
@@ -33,11 +34,12 @@ const POLL_INTERVAL_MS = 2000;
 const POLL_MAX_ATTEMPTS = 10;
 
 const route = useRoute();
+const router = useRouter();
 const tasksStore = useTasksStore();
 const authStore = useAuthStore();
 const stream = useTaskGenerationStream();
 
-const { current, isLoadingDetail, detailError } = storeToRefs(tasksStore);
+const { current, isLoadingDetail, detailError, deletingId, deleteError } = storeToRefs(tasksStore);
 // O composable já retorna refs (readonly): desestruturamos direto, com apelidos.
 const {
   events,
@@ -51,6 +53,26 @@ const taskId = computed(() => {
   const raw = route.params.id;
   return Array.isArray(raw) ? (raw[0] ?? '') : raw;
 });
+
+// --- Exclusão ---
+// Controla a abertura do diálogo de confirmação de exclusão.
+const isConfirmOpen = ref(false);
+// Está excluindo a tarefa atual.
+const isDeleting = computed(() => deletingId.value === taskId.value);
+
+function askDelete(): void {
+  isConfirmOpen.value = true;
+}
+
+// Confirma a exclusão; ao concluir, volta para a listagem. Em erro, mantém a
+// página e exibe a mensagem (deleteError).
+async function confirmDelete(): Promise<void> {
+  const ok = await tasksStore.remove(taskId.value);
+  if (ok) {
+    isConfirmOpen.value = false;
+    void router.push('/tasks');
+  }
+}
 
 // --- Estado local do polling de avaliação ---
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -176,12 +198,49 @@ watch(hasCompleted, (completed) => {
       <div class="task-detail-page__title-row">
         <h1 class="task-detail-page__title">Tarefa</h1>
         <TaskStatusBadge v-if="current" :status="current.status" />
+        <button
+          v-if="current"
+          type="button"
+          class="task-detail-page__delete"
+          :disabled="isDeleting"
+          aria-label="Excluir tarefa"
+          @click="askDelete"
+        >
+          <svg
+            class="task-detail-page__delete-icon"
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m2 0v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7m4 4v6m4-6v6"
+            />
+          </svg>
+        </button>
       </div>
       <p v-if="current" class="task-detail-page__description">{{ current.description }}</p>
       <time v-if="current" :datetime="current.createdAt" class="task-detail-page__date">
         {{ formatDate(current.createdAt) }}
       </time>
+      <p v-if="deleteError" role="alert" class="task-detail-page__error">{{ deleteError }}</p>
     </header>
+
+    <ConfirmDialog
+      v-model:open="isConfirmOpen"
+      title="Excluir tarefa"
+      message="Tem certeza que deseja excluir esta tarefa? Esta ação não pode ser desfeita."
+      confirm-label="Excluir"
+      cancel-label="Cancelar"
+      :loading="isDeleting"
+      @confirm="confirmDelete"
+    />
 
     <!-- Sem token: rota protegida, mas defensivo. -->
     <p v-if="authStore.accessToken === null" role="alert" class="task-detail-page__error">
@@ -265,6 +324,45 @@ watch(hasCompleted, (completed) => {
   align-items: center;
   gap: var(--spacing-12);
   flex-wrap: wrap;
+}
+
+/* Empurra o botão de exclusão para a direita da linha do título. */
+.task-detail-page__delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 2px solid var(--color-faded-gray);
+  border-radius: var(--radius-xl);
+  background-color: var(--color-paper-white);
+  color: var(--color-pencil-gray);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.task-detail-page__delete:hover:not(:disabled),
+.task-detail-page__delete:focus-visible:not(:disabled) {
+  color: var(--color-night-ink);
+  border-color: var(--color-night-ink);
+}
+
+.task-detail-page__delete:focus-visible {
+  outline: 2px solid var(--color-spark-blue);
+  outline-offset: 2px;
+}
+
+.task-detail-page__delete:disabled {
+  cursor: not-allowed;
+  color: var(--color-faded-gray);
+}
+
+.task-detail-page__delete-icon {
+  display: block;
 }
 
 .task-detail-page__title {

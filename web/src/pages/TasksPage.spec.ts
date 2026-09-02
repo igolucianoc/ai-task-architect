@@ -23,7 +23,10 @@ const tasks = {
   totalPages: ref(1),
   isLoading: ref(false),
   error: ref<string | null>(null),
+  deletingId: ref<string | null>(null),
+  deleteError: ref<string | null>(null),
   fetchList: vi.fn(),
+  remove: vi.fn<(id: string) => Promise<boolean>>(),
 };
 
 vi.mock('@/stores/tasks.store', () => ({
@@ -38,6 +41,8 @@ vi.mock('pinia', () => ({
     totalPages: store.totalPages,
     isLoading: store.isLoading,
     error: store.error,
+    deletingId: store.deletingId,
+    deleteError: store.deleteError,
   }),
 }));
 
@@ -59,7 +64,11 @@ describe('TasksPage', () => {
     tasks.totalPages.value = 1;
     tasks.isLoading.value = false;
     tasks.error.value = null;
+    tasks.deletingId.value = null;
+    tasks.deleteError.value = null;
     tasks.fetchList.mockReset();
+    tasks.remove.mockReset();
+    tasks.remove.mockResolvedValue(true);
   });
 
   it('deve chamar fetchList ao montar', () => {
@@ -110,6 +119,35 @@ describe('TasksPage', () => {
     expect(screen.getByText('Tarefa B')).toBeInTheDocument();
     expect(screen.getByText('Concluída')).toBeInTheDocument();
     expect(screen.getByText('Pendente')).toBeInTheDocument();
+  });
+
+  it('deve abrir o diálogo de confirmação e excluir a tarefa ao confirmar', async () => {
+    const user = userEvent.setup();
+    tasks.items.value = [makeTask({ id: 'a', description: 'Tarefa A' })];
+    render(TasksPage);
+
+    // Abre a confirmação pelo botão de lixeira do item.
+    await user.click(screen.getByRole('button', { name: 'Excluir tarefa: Tarefa A' }));
+
+    // O diálogo aparece com o botão de confirmação.
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Excluir' }));
+
+    expect(tasks.remove).toHaveBeenCalledWith('a');
+  });
+
+  it('não deve chamar remove ao cancelar a exclusão', async () => {
+    const user = userEvent.setup();
+    tasks.items.value = [makeTask({ id: 'a', description: 'Tarefa A' })];
+    render(TasksPage);
+
+    await user.click(screen.getByRole('button', { name: 'Excluir tarefa: Tarefa A' }));
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    expect(tasks.remove).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('deve chamar fetchList(page+1) ao clicar em Próxima', async () => {

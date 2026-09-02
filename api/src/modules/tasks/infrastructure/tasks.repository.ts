@@ -356,6 +356,19 @@ export class TasksRepository {
     });
   }
 
+  /**
+   * Exclui uma tarefa do usuário e todos os seus filhos (runs, artifacts,
+   * avaliação e usos de token) via cascade definido no schema. Retorna `true`
+   * se algo foi excluído e `false` se a tarefa não existir ou não pertencer ao
+   * usuário — permitindo ao chamador responder 404 sem vazar existência.
+   */
+  async deleteForUser(taskId: string, userId: string): Promise<boolean> {
+    const result = await this.prisma.task.deleteMany({
+      where: { id: taskId, userId },
+    });
+    return result.count > 0;
+  }
+
   async listForUser(
     userId: string,
     skip: number,

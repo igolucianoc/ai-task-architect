@@ -113,4 +113,38 @@ describe('tasks.store', () => {
     expect(store.error).toBe('Descrição inválida');
     expect(store.isLoading).toBe(false);
   });
+
+  it('remove exclui a tarefa da listagem, decrementa o total e limpa current', async () => {
+    vi.mocked(tasksService.listTasks).mockResolvedValue(PAGE);
+    vi.mocked(tasksService.getTask).mockResolvedValue(DETAIL);
+    vi.mocked(tasksService.deleteTask).mockResolvedValue(undefined);
+    const store = useTasksStore();
+    await store.fetchList();
+    await store.fetchDetail('t1');
+
+    const ok = await store.remove('t1');
+
+    expect(ok).toBe(true);
+    expect(tasksService.deleteTask).toHaveBeenCalledWith(expect.anything(), 't1');
+    expect(store.items.find((task) => task.id === 't1')).toBeUndefined();
+    expect(store.total).toBe(PAGE.total - 1);
+    expect(store.current).toBeNull();
+    expect(store.deletingId).toBeNull();
+    expect(store.deleteError).toBeNull();
+  });
+
+  it('remove retorna false e seta deleteError em falha', async () => {
+    vi.mocked(tasksService.listTasks).mockResolvedValue(PAGE);
+    vi.mocked(tasksService.deleteTask).mockRejectedValue(new ApiError(404, 'Não encontrada', null));
+    const store = useTasksStore();
+    await store.fetchList();
+
+    const ok = await store.remove('t1');
+
+    expect(ok).toBe(false);
+    expect(store.deleteError).toBe('Não encontrada');
+    // Item permanece na listagem quando a exclusão falha.
+    expect(store.items.find((task) => task.id === 't1')).toBeDefined();
+    expect(store.deletingId).toBeNull();
+  });
 });

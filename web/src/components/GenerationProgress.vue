@@ -14,13 +14,30 @@ const props = defineProps<{
   status: StreamStatus;
 }>();
 
-// Passos de progresso, na ordem em que ocorrem, com rótulo pt-BR.
-const STEPS: ReadonlyArray<{ event: TaskProgressEventName; label: string }> = [
-  { event: 'started', label: 'Iniciando' },
-  { event: 'analyzing_context', label: 'Analisando contexto' },
-  { event: 'generating_requirements', label: 'Elaborando requisitos' },
-  { event: 'generating_acceptance_criteria', label: 'Definindo critérios de aceite' },
-  { event: 'evaluating', label: 'Revisando' },
+// Passos de progresso, na ordem em que ocorrem, com rótulo e uma descrição de
+// fallback em pt-BR (usada quando o evento não traz `message`).
+const STEPS: ReadonlyArray<{
+  event: TaskProgressEventName;
+  label: string;
+  hint: string;
+}> = [
+  { event: 'started', label: 'Iniciando', hint: 'Preparando a geração da especificação.' },
+  {
+    event: 'analyzing_context',
+    label: 'Analisando contexto',
+    hint: 'Interpretando a necessidade e consultando o modelo. Isso pode levar alguns segundos.',
+  },
+  {
+    event: 'generating_requirements',
+    label: 'Elaborando requisitos',
+    hint: 'Elaborando requisitos funcionais e não funcionais.',
+  },
+  {
+    event: 'generating_acceptance_criteria',
+    label: 'Definindo critérios de aceite',
+    hint: 'Derivando os critérios de aceite.',
+  },
+  { event: 'evaluating', label: 'Revisando', hint: 'Validando e organizando o resultado.' },
 ];
 
 // Mostra o spinner enquanto a conexão está em andamento.
@@ -53,6 +70,33 @@ const currentStepLabel = computed(() =>
   currentStepIndex.value >= 0 ? STEPS[currentStepIndex.value].label : 'Conectando',
 );
 
+// Último evento de progresso recebido (o mais recente que não é terminal).
+const lastProgressEvent = computed(() => {
+  for (let i = props.events.length - 1; i >= 0; i -= 1) {
+    const event = props.events[i];
+    if (event.event !== 'completed' && event.event !== 'failed') {
+      return event;
+    }
+  }
+  return null;
+});
+
+// Descrição do passo atual: prioriza a mensagem vinda do evento; se ausente,
+// usa o hint do passo. Dá ao usuário a percepção de atividade durante a espera.
+const currentStepHint = computed(() => {
+  if (!isActive.value) {
+    return '';
+  }
+  const message = lastProgressEvent.value?.message;
+  if (typeof message === 'string' && message.length > 0) {
+    return message;
+  }
+  if (currentStepIndex.value >= 0) {
+    return STEPS[currentStepIndex.value].hint;
+  }
+  return 'Conectando ao servidor de geração.';
+});
+
 // Estado visual de cada passo: concluído, atual ou pendente.
 type StepState = 'done' | 'current' | 'pending';
 
@@ -74,11 +118,19 @@ function stepState(index: number): StepState {
       <p class="generation-progress__current" aria-live="polite">{{ currentStepLabel }}</p>
     </div>
 
+    <p v-if="currentStepHint" class="generation-progress__hint" aria-live="polite">
+      {{ currentStepHint }}
+    </p>
+
     <ol class="generation-progress__steps">
       <li
         v-for="(step, index) in STEPS"
         :key="step.event"
-        :class="['generation-progress__step', `generation-progress__step--${stepState(index)}`]"
+        :class="[
+          'generation-progress__step',
+          `generation-progress__step--${stepState(index)}`,
+          { 'generation-progress__step--active': stepState(index) === 'current' && isActive },
+        ]"
         :aria-current="stepState(index) === 'current' ? 'step' : undefined"
       >
         <span class="generation-progress__marker" aria-hidden="true"></span>
@@ -106,6 +158,12 @@ function stepState(index: number): StepState {
   font-family: var(--font-duolingo-sans);
   font-weight: var(--font-weight-bold);
   color: var(--color-charcoal);
+}
+
+.generation-progress__hint {
+  font-size: var(--text-caption);
+  color: var(--color-pencil-gray);
+  margin-top: calc(-1 * var(--spacing-8));
 }
 
 .generation-progress__steps {
@@ -150,5 +208,29 @@ function stepState(index: number): StepState {
 .generation-progress__step--current .generation-progress__label {
   color: var(--color-spark-blue);
   font-weight: var(--font-weight-bold);
+}
+
+/* Passo atual e ativo (stream em andamento): marcador pulsa para indicar
+   trabalho em curso, mesmo quando o passo demora (espera pelo LLM). */
+.generation-progress__step--active .generation-progress__marker {
+  background-color: var(--color-spark-blue);
+  animation: generation-progress-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes generation-progress-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(28, 176, 246, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(28, 176, 246, 0);
+  }
+}
+
+/* Acessibilidade: desativa a animação para quem prefere menos movimento. */
+@media (prefers-reduced-motion: reduce) {
+  .generation-progress__step--active .generation-progress__marker {
+    animation: none;
+  }
 }
 </style>

@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Delete,
   Sse,
   Body,
   Param,
@@ -154,6 +155,23 @@ export class TasksController {
       throw new NotFoundException('Tarefa não encontrada');
     }
     return toTaskDetail(task);
+  }
+
+  /**
+   * Exclui uma tarefa do usuário autenticado, com todos os seus filhos
+   * (cascade). Responde 204 sem corpo em caso de sucesso e 404 quando a tarefa
+   * não existe ou não pertence ao usuário.
+   */
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    const deleted = await this.repository.deleteForUser(id, user.id);
+    if (!deleted) {
+      throw new NotFoundException('Tarefa não encontrada');
+    }
   }
 
   /**
