@@ -45,8 +45,10 @@ export class HttpLoggingInterceptor implements NestInterceptor {
     const url = request.originalUrl || request.url;
     const correlationId = this.readCorrelationId();
 
-    // Espelha o correlation id na resposta de forma defensiva.
-    if (correlationId && typeof response.setHeader === 'function') {
+    // Espelha o correlation id na resposta de forma defensiva. Em respostas de
+    // streaming (SSE) os headers já podem ter sido enviados — nesse caso não
+    // tentamos setar (evita "Cannot set headers after they are sent").
+    if (correlationId && typeof response.setHeader === 'function' && !response.headersSent) {
       response.setHeader(CORRELATION_ID_HEADER, correlationId);
     }
 

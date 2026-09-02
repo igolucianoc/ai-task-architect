@@ -60,10 +60,14 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
   /** Lê o correlation id do CLS de forma segura; undefined fora de request. */
   private readCorrelationId(): string | undefined {
-    if (!this.cls.isActive()) {
+    // Em runtime normal o ClsService é injetado; guardamos contra ausência
+    // (contexto de teste sem o provider) para o filtro nunca quebrar ao tratar
+    // um erro. O cast reconhece que a DI pode não ter populado a dependência.
+    const cls = this.cls as ClsService | undefined;
+    if (!cls || !cls.isActive()) {
       return undefined;
     }
-    const value = this.cls.get<string | undefined>(CORRELATION_ID_KEY);
+    const value = cls.get<string | undefined>(CORRELATION_ID_KEY);
     return typeof value === 'string' && value.length > 0 ? value : undefined;
   }
 
