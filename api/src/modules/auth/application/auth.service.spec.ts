@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { User, RefreshSession } from '@prisma/client';
 import { AuthService } from './auth.service';
 import { UsersService } from '../../users/application/users.service';

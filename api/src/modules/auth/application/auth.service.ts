@@ -1,5 +1,5 @@
 import { Injectable, ConflictException, UnauthorizedException, Logger } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { User } from '@prisma/client';
 import { UsersService } from '../../users/application/users.service';
 import { TokenService } from './token.service';
