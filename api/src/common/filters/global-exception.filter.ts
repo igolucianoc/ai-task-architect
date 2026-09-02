@@ -9,7 +9,10 @@ import {
 import { Request, Response } from 'express';
 import { ZodError } from 'zod';
 import { ClsService } from 'nestjs-cls';
-import { CORRELATION_ID_KEY } from '../observability/observability.constants';
+import {
+  CORRELATION_ID_KEY,
+  sanitizeUrlForLogging,
+} from '../observability/observability.constants';
 
 interface ErrorResponse {
   statusCode: number;
@@ -34,12 +37,15 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const { statusCode, message, error } = this.resolveError(exception);
     const correlationId = this.readCorrelationId();
 
+    // Mascara parâmetros sensíveis (ex.: `token` do SSE) antes de expor/logar a URL.
+    const safePath = sanitizeUrlForLogging(request.url);
+
     const body: ErrorResponse = {
       statusCode,
       message,
       error,
       timestamp: new Date().toISOString(),
-      path: request.url,
+      path: safePath,
     };
 
     if (correlationId) {
@@ -47,7 +53,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     }
 
     const suffix = correlationId ? ` [correlationId=${correlationId}]` : '';
-    const logLine = `${request.method} ${request.url} → ${String(statusCode)}${suffix}`;
+    const logLine = `${request.method} ${safePath} → ${String(statusCode)}${suffix}`;
 
     if (statusCode >= 500) {
       this.logger.error(logLine, exception instanceof Error ? exception.stack : String(exception));

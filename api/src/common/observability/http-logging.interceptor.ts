@@ -9,7 +9,11 @@ import { Observable, catchError, tap, throwError } from 'rxjs';
 import { ClsService } from 'nestjs-cls';
 import type { Request, Response } from 'express';
 import { AppLogger } from './app-logger';
-import { CORRELATION_ID_HEADER, CORRELATION_ID_KEY } from './observability.constants';
+import {
+  CORRELATION_ID_HEADER,
+  CORRELATION_ID_KEY,
+  sanitizeUrlForLogging,
+} from './observability.constants';
 
 /** Contexto de logging da requisição, montado uma vez por request. */
 const HTTP_CONTEXT = 'HTTP';
@@ -42,7 +46,8 @@ export class HttpLoggingInterceptor implements NestInterceptor {
     const response = http.getResponse<Response>();
 
     const method = request.method;
-    const url = request.originalUrl || request.url;
+    // Mascara parâmetros sensíveis (ex.: `token` do SSE) antes de logar a URL.
+    const url = sanitizeUrlForLogging(request.originalUrl || request.url);
     const correlationId = this.readCorrelationId();
 
     // Espelha o correlation id na resposta de forma defensiva. Em respostas de

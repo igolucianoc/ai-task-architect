@@ -3,6 +3,7 @@ import {
   TaskStatus,
   GenerationRunStatus,
   EvaluationStatus,
+  QualityGateResult,
   LlmOperation,
   Prisma,
 } from '@prisma/client';
@@ -37,32 +38,49 @@ const IDS = {
 
 const DEMO_MODEL = 'HuggingFaceH4/zephyr-7b-beta';
 
-const SPEC_EXAMPLE = `## Contexto
-A API de checkout processa pagamentos de forma síncrona, o que trava a resposta ao cliente quando o gateway está lento.
-
-## Objetivo
-Tornar o processamento de pagamento assíncrono, retornando um identificador de transação imediatamente e notificando o cliente ao concluir.
-
-## Critérios de aceite
-- [ ] O endpoint POST /checkout retorna 202 com um transactionId em menos de 300ms
-- [ ] O processamento efetivo ocorre em um worker desacoplado
-- [ ] O cliente é notificado do resultado via webhook ou polling
-- [ ] Falhas no gateway são retentadas até 3 vezes com backoff
-
-## Passos de implementação
-1. Introduzir uma fila para desacoplar recebimento e processamento
-2. Criar um worker que consome a fila e chama o gateway
-3. Persistir o estado da transação (pending, succeeded, failed)
-4. Expor GET /checkout/:id para consulta de status
-5. Implementar notificação de conclusão
-
-## Riscos e dependências
-- Dependência de infraestrutura de fila (Redis/RabbitMQ)
-- Risco de inconsistência se o worker falhar após cobrar o gateway
-- Necessário idempotência na chamada ao gateway
-
-## Estimativa de esforço
-média — requer nova infraestrutura de fila e tratamento de estados`;
+// Especificação de demonstração no MESMO formato que o fluxo real persiste:
+// JSON serializado de um TaskSpecification (contentFormat 'json'). O presenter
+// faz JSON.parse do artifact; gravar Markdown aqui faria a tarefa COMPLETED
+// aparecer sem especificação na API.
+const SPEC_EXAMPLE = {
+  title: 'Processamento assíncrono de pagamento no checkout',
+  context:
+    'A API de checkout processa pagamentos de forma síncrona, o que trava a resposta ao cliente quando o gateway está lento.',
+  objective:
+    'Tornar o processamento de pagamento assíncrono, retornando um identificador de transação imediatamente e notificando o cliente ao concluir.',
+  functionalRequirements: [
+    'Enfileirar o pagamento e retornar um transactionId imediatamente',
+    'Processar o pagamento em um worker desacoplado da requisição',
+    'Notificar o cliente do resultado via webhook ou permitir polling por status',
+  ],
+  nonFunctionalRequirements: [
+    'O endpoint de checkout deve responder em menos de 300ms no caminho feliz',
+    'Retentar falhas transitórias do gateway até 3 vezes com backoff exponencial',
+  ],
+  acceptanceCriteria: [
+    'POST /checkout retorna 202 com um transactionId em menos de 300ms',
+    'O processamento efetivo ocorre em um worker desacoplado',
+    'O cliente é notificado do resultado via webhook ou polling',
+    'Falhas no gateway são retentadas até 3 vezes com backoff',
+  ],
+  technicalTasks: [
+    'Introduzir uma fila para desacoplar recebimento e processamento',
+    'Criar um worker que consome a fila e chama o gateway',
+    'Persistir o estado da transação (pending, succeeded, failed)',
+    'Expor GET /checkout/:id para consulta de status',
+    'Implementar notificação de conclusão',
+  ],
+  risks: [
+    'Inconsistência se o worker falhar após cobrar o gateway',
+    'Necessidade de idempotência na chamada ao gateway',
+  ],
+  dependencies: ['Infraestrutura de fila (Redis/RabbitMQ)'],
+  definitionOfDone: [
+    'Testes cobrindo enfileiramento, processamento e notificação',
+    'Idempotência do gateway validada',
+    'Documentação do novo fluxo de status atualizada',
+  ],
+} as const;
 
 async function main(): Promise<void> {
   const passwordHash = await bcrypt.hash('DemoPass123!', 12);
@@ -116,36 +134,59 @@ async function main(): Promise<void> {
     },
   });
 
+  const specContent = JSON.stringify(SPEC_EXAMPLE);
   await prisma.taskArtifact.upsert({
     where: { id: IDS.artifacts.completed },
-    update: { content: SPEC_EXAMPLE },
+    update: { content: specContent, contentFormat: 'json' },
     create: {
       id: IDS.artifacts.completed,
       taskId: IDS.tasks.completed,
       generationRunId: IDS.runs.completed,
-      content: SPEC_EXAMPLE,
-      contentFormat: 'markdown',
+      content: specContent,
+      contentFormat: 'json',
     },
   });
 
+  // Campos compartilhados entre create e update: o upsert precisa CONVERGIR ao
+  // mesmo estado em reexecuções (idempotência real). Atualizar só o `status` no
+  // update deixaria registros de seeds antigos com formato divergente.
+  const completedEvaluation = {
+    status: EvaluationStatus.COMPLETED,
+    result: QualityGateResult.APPROVED,
+    promptVersion: 'judge-v1',
+    // 8.50 = média dos seis critérios abaixo (soma 51 / 6). Mantém coerência
+    // entre a coluna `score` e o detalhamento em `dimensions.scores`.
+    score: new Prisma.Decimal('8.50'),
+    rationale:
+      'A especificação está clara e bem estruturada. Os critérios de aceite são testáveis. Poderia detalhar melhor a estratégia de idempotência no gateway.',
+    // Mesmo formato que o repositório persiste (saveEvaluationSuccess):
+    // { scores: {<6 critérios>}, overallScore, reasons }. As chaves batem com
+    // EVALUATION_CRITERIA para o presenter conseguir extrair os critérios.
+    dimensions: {
+      scores: {
+        clarity: 9,
+        completeness: 9,
+        consistency: 8,
+        testability: 9,
+        risks: 7,
+        requirementsAdherence: 9,
+      },
+      overallScore: 8.5,
+      reasons: [
+        'Critérios de aceite testáveis e bem definidos',
+        'Poderia detalhar a estratégia de idempotência no gateway',
+      ],
+    } satisfies Prisma.InputJsonObject,
+    model: DEMO_MODEL,
+  } satisfies Prisma.TaskEvaluationUpdateInput;
+
   await prisma.taskEvaluation.upsert({
     where: { id: IDS.evaluations.completed },
-    update: { status: EvaluationStatus.COMPLETED },
+    update: completedEvaluation,
     create: {
       id: IDS.evaluations.completed,
       taskId: IDS.tasks.completed,
-      status: EvaluationStatus.COMPLETED,
-      score: new Prisma.Decimal('8.40'),
-      rationale:
-        'A especificação está clara e bem estruturada. Os critérios de aceite são testáveis. Poderia detalhar melhor a estratégia de idempotência no gateway.',
-      dimensions: {
-        clarity: 9,
-        completeness: 8,
-        actionability: 9,
-        risks: 7,
-        formatting: 9,
-      },
-      model: DEMO_MODEL,
+      ...completedEvaluation,
     },
   });
 
