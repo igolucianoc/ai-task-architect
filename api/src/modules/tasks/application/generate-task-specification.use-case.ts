@@ -1,7 +1,10 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
+import { ClsService } from 'nestjs-cls';
 import { LLM_PROVIDER, LlmProvider } from './llm-provider.port';
 import { parseTaskSpecification, TaskSpecification } from './task-specification';
 import { buildGenerationMessages } from './prompt-builder';
+import { AppLogger } from '../../../common/observability/app-logger';
+import { CORRELATION_ID_KEY } from '../../../common/observability/observability.constants';
 import { TasksRepository } from '../infrastructure/tasks.repository';
 import {
   buildEvent,
@@ -24,12 +27,19 @@ const TEMPERATURE = 0.3;
 
 @Injectable()
 export class GenerateTaskSpecificationUseCase {
-  private readonly logger = new Logger(GenerateTaskSpecificationUseCase.name);
+  private readonly context = GenerateTaskSpecificationUseCase.name;
 
   constructor(
     @Inject(LLM_PROVIDER) private readonly llm: LlmProvider,
     private readonly repository: TasksRepository,
+    private readonly logger: AppLogger,
+    private readonly cls: ClsService,
   ) {}
+
+  /** Lê o correlationId do contexto atual (request ou escopo do worker), se houver. */
+  private correlationId(): string | undefined {
+    return this.cls.isActive() ? this.cls.get<string | undefined>(CORRELATION_ID_KEY) : undefined;
+  }
 
   async execute(
     input: GenerateTaskInput,
@@ -57,11 +67,19 @@ export class GenerateTaskSpecificationUseCase {
       });
 
       // Observabilidade: nunca logar prompt/conteúdo/token; só metadados.
+      // `tokens=n/d` continua sinalizando ausência de usage reportado pelo provider.
       const totalTokens = result.usage ? String(result.usage.totalTokens) : 'n/d';
-      this.logger.log(
-        `geração taskId=${taskId} model=${result.model} ` +
-          `tokens=${totalTokens} latencyMs=${String(result.latencyMs)}`,
-      );
+      this.logger.log(`geração concluída taskId=${taskId}`, this.context, {
+        operation: 'generation',
+        taskId,
+        runId,
+        model: result.model,
+        promptTokens: result.usage?.promptTokens ?? null,
+        completionTokens: result.usage?.completionTokens ?? null,
+        totalTokens,
+        latencyMs: result.latencyMs,
+        correlationId: this.correlationId(),
+      });
 
       // Marcos de progresso, NÃO fases reais do provider: a geração é uma única
       // chamada ao LLM. Emitimos estes marcos após receber o conteúdo, apenas
@@ -89,7 +107,13 @@ export class GenerateTaskSpecificationUseCase {
       const parsed = parseTaskSpecification(result.content);
       if (!parsed.success) {
         // Saída do modelo não confiável: não persistir artefato inválido.
-        this.logger.warn(`geração taskId=${taskId} rejeitada: ${parsed.error}`);
+        this.logger.warn(`geração rejeitada taskId=${taskId}`, this.context, {
+          operation: 'generation',
+          taskId,
+          runId,
+          reason: parsed.error,
+          correlationId: this.correlationId(),
+        });
         await this.repository.failRun({
           taskId,
           runId,
@@ -121,7 +145,13 @@ export class GenerateTaskSpecificationUseCase {
       return { status: 'completed', taskId, specification: parsed.data };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'erro desconhecido do provider';
-      this.logger.error(`geração taskId=${taskId} falhou: ${message}`);
+      this.logger.error(`geração falhou taskId=${taskId}`, undefined, this.context, {
+        operation: 'generation',
+        taskId,
+        runId,
+        error: message,
+        correlationId: this.correlationId(),
+      });
       await this.repository.failRun({
         taskId,
         runId,
@@ -145,7 +175,12 @@ export class GenerateTaskSpecificationUseCase {
       onEvent(event);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'erro desconhecido no listener';
-      this.logger.warn(`listener de evento '${event.event}' falhou: ${message}`);
+      this.logger.warn(`listener de evento '${event.event}' falhou`, this.context, {
+        operation: 'generation',
+        event: event.event,
+        error: message,
+        correlationId: this.correlationId(),
+      });
     }
   }
 

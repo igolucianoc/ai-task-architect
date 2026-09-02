@@ -1,7 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
+import { ClsService } from 'nestjs-cls';
 import { EvaluateTaskSpecificationUseCase } from '../application/evaluate-task-specification.use-case';
+import { CORRELATION_ID_KEY } from '../../../common/observability/observability.constants';
 import { TasksRepository } from './tasks.repository';
 import { EVALUATION_QUEUE, EvaluationJobData } from './evaluation.queue';
 
@@ -24,37 +27,54 @@ export class EvaluationProcessor extends WorkerHost {
   constructor(
     private readonly evaluateUseCase: EvaluateTaskSpecificationUseCase,
     private readonly repository: TasksRepository,
+    private readonly cls: ClsService,
   ) {
     super();
   }
 
   async process(job: Job<EvaluationJobData>): Promise<void> {
-    const { taskId } = job.data;
+    // Fallback quando o job não traz correlationId (jobs antigos): geramos um id
+    // próprio da execução assíncrona com randomUUID(), rastreável e independente
+    // do request original. O log "avaliação iniciada" liga taskId ao id gerado.
+    const correlationId = job.data.correlationId ?? randomUUID();
 
-    // Reidrata a necessidade original + especificação a partir do banco.
-    const source = await this.repository.findTaskWithArtifactById(taskId);
-    if (!source) {
-      // Dado inválido: não relança (reprocessar não ajudaria).
-      this.logger.warn(
-        `avaliação ignorada taskId=${taskId}: task inexistente ou sem especificação válida`,
-      );
-      return;
-    }
+    // Abre um escopo CLS para que TODOS os logs abaixo — inclusive os emitidos
+    // dentro do EvaluateTaskSpecificationUseCase — herdem o mesmo correlationId.
+    // O `run` é aguardado e propaga exceções: dado inválido não relança; erro de
+    // infra propaga normalmente para o BullMQ acionar retry.
+    await this.cls.run(async () => {
+      this.cls.set(CORRELATION_ID_KEY, correlationId);
 
-    const outcome = await this.evaluateUseCase.execute({
-      taskId,
-      description: source.description,
-      specification: source.specification,
+      const { taskId } = job.data;
+
+      // Liga os dois mundos (request → worker): registra o vínculo taskId/correlationId.
+      this.logger.log(`avaliação iniciada taskId=${taskId} correlationId=${correlationId}`);
+
+      // Reidrata a necessidade original + especificação a partir do banco.
+      const source = await this.repository.findTaskWithArtifactById(taskId);
+      if (!source) {
+        // Dado inválido: não relança (reprocessar não ajudaria).
+        this.logger.warn(
+          `avaliação ignorada taskId=${taskId}: task inexistente ou sem especificação válida`,
+        );
+        return;
+      }
+
+      const outcome = await this.evaluateUseCase.execute({
+        taskId,
+        description: source.description,
+        specification: source.specification,
+      });
+
+      // Metadados de conclusão — sem prompt/conteúdo/dados sensíveis.
+      if (outcome.status === 'completed') {
+        this.logger.log(
+          `avaliação concluída taskId=${taskId} status=completed ` +
+            `result=${outcome.result} overallScore=${outcome.overallScore.toFixed(2)}`,
+        );
+      } else {
+        this.logger.log(`avaliação concluída taskId=${taskId} status=unavailable`);
+      }
     });
-
-    // Metadados de conclusão — sem prompt/conteúdo/dados sensíveis.
-    if (outcome.status === 'completed') {
-      this.logger.log(
-        `avaliação concluída taskId=${taskId} status=completed ` +
-          `result=${outcome.result} overallScore=${outcome.overallScore.toFixed(2)}`,
-      );
-    } else {
-      this.logger.log(`avaliação concluída taskId=${taskId} status=unavailable`);
-    }
   }
 }

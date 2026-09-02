@@ -1,6 +1,9 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
+import { ClsService } from 'nestjs-cls';
 import { LLM_PROVIDER, LlmProvider } from './llm-provider.port';
 import { TaskSpecification } from './task-specification';
+import { AppLogger } from '../../../common/observability/app-logger';
+import { CORRELATION_ID_KEY } from '../../../common/observability/observability.constants';
 import {
   parseJudgeResponse,
   evaluateQualityGate,
@@ -33,12 +36,19 @@ const TEMPERATURE = 0;
  */
 @Injectable()
 export class EvaluateTaskSpecificationUseCase {
-  private readonly logger = new Logger(EvaluateTaskSpecificationUseCase.name);
+  private readonly context = EvaluateTaskSpecificationUseCase.name;
 
   constructor(
     @Inject(LLM_PROVIDER) private readonly llm: LlmProvider,
     private readonly repository: TasksRepository,
+    private readonly logger: AppLogger,
+    private readonly cls: ClsService,
   ) {}
+
+  /** Lê o correlationId do contexto atual (request ou escopo do worker), se houver. */
+  private correlationId(): string | undefined {
+    return this.cls.isActive() ? this.cls.get<string | undefined>(CORRELATION_ID_KEY) : undefined;
+  }
 
   async execute(input: EvaluateTaskInput): Promise<EvaluateTaskResult> {
     const taskId = input.taskId;
@@ -54,16 +64,30 @@ export class EvaluateTaskSpecificationUseCase {
       });
 
       // Observabilidade: nunca logar prompt/conteúdo/token; só metadados.
+      // `tokens=n/d` continua sinalizando ausência de usage reportado pelo provider.
       const totalTokens = result.usage ? String(result.usage.totalTokens) : 'n/d';
-      this.logger.log(
-        `avaliação taskId=${taskId} model=${result.model} ` +
-          `tokens=${totalTokens} latencyMs=${String(result.latencyMs)}`,
-      );
+      this.logger.log(`avaliação concluída taskId=${taskId}`, this.context, {
+        operation: 'evaluation',
+        taskId,
+        model: result.model,
+        promptTokens: result.usage?.promptTokens ?? null,
+        completionTokens: result.usage?.completionTokens ?? null,
+        totalTokens,
+        latencyMs: result.latencyMs,
+        promptVersion: JUDGE_PROMPT_VERSION,
+        correlationId: this.correlationId(),
+      });
 
       const parsed = parseJudgeResponse(result.content);
       if (!parsed.success) {
         // Saída do juiz não confiável: registra a avaliação como indisponível.
-        this.logger.warn(`avaliação taskId=${taskId} indisponível: ${parsed.error}`);
+        this.logger.warn(`avaliação indisponível taskId=${taskId}`, this.context, {
+          operation: 'evaluation',
+          taskId,
+          reason: parsed.error,
+          promptVersion: JUDGE_PROMPT_VERSION,
+          correlationId: this.correlationId(),
+        });
         await this.repository.saveEvaluationUnavailable({ taskId, reason: parsed.error });
         return { status: 'unavailable', reason: parsed.error };
       }
@@ -89,7 +113,13 @@ export class EvaluateTaskSpecificationUseCase {
       return { status: 'completed', result: gate.result, overallScore: gate.overallScore };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'erro desconhecido do provider';
-      this.logger.error(`avaliação taskId=${taskId} falhou: ${message}`);
+      this.logger.error(`avaliação falhou taskId=${taskId}`, undefined, this.context, {
+        operation: 'evaluation',
+        taskId,
+        error: message,
+        promptVersion: JUDGE_PROMPT_VERSION,
+        correlationId: this.correlationId(),
+      });
       await this.repository.saveEvaluationUnavailable({ taskId, reason: message });
       return { status: 'unavailable', reason: message };
     }

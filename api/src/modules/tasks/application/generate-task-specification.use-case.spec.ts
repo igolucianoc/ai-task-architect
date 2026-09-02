@@ -1,9 +1,32 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { ClsService } from 'nestjs-cls';
 import { GenerateTaskSpecificationUseCase } from './generate-task-specification.use-case';
 import { FakeLlmProvider } from '../infrastructure/fake-llm.provider';
 import { TasksRepository } from '../infrastructure/tasks.repository';
+import { AppLogger } from '../../../common/observability/app-logger';
 import { type TaskGenerationEvent } from './task-generation-events';
 import { TaskGenerationRun } from '@prisma/client';
+
+/** Logger estruturado mockado — só precisamos que os métodos existam e não quebrem. */
+function makeLogger(): AppLogger {
+  return {
+    log: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    verbose: vi.fn(),
+  } as unknown as AppLogger;
+}
+
+/** ClsService mockado: sem contexto ativo por padrão (correlationId = undefined). */
+function makeCls(): ClsService {
+  return {
+    isActive: vi.fn().mockReturnValue(false),
+    get: vi.fn().mockReturnValue(undefined),
+    set: vi.fn(),
+    run: vi.fn((cb: () => unknown) => cb()),
+  } as unknown as ClsService;
+}
 
 function makeRun(): TaskGenerationRun {
   return {
@@ -36,6 +59,8 @@ describe('GenerateTaskSpecificationUseCase', () => {
     useCase = new GenerateTaskSpecificationUseCase(
       provider,
       repository as unknown as TasksRepository,
+      makeLogger(),
+      makeCls(),
     );
   });
 
@@ -173,5 +198,29 @@ describe('GenerateTaskSpecificationUseCase', () => {
 
     expect(result.status).toBe('completed');
     expect(repository.completeRun).toHaveBeenCalledOnce();
+  });
+
+  it('inclui o correlationId do contexto no log de conclusão da geração', async () => {
+    const logger = makeLogger();
+    const cls = {
+      isActive: vi.fn().mockReturnValue(true),
+      get: vi.fn().mockReturnValue('corr-123'),
+      set: vi.fn(),
+      run: vi.fn((cb: () => unknown) => cb()),
+    } as unknown as ClsService;
+    useCase = new GenerateTaskSpecificationUseCase(
+      provider,
+      repository as unknown as TasksRepository,
+      logger,
+      cls,
+    );
+
+    await useCase.execute({ taskId: 'task-1', userId: 'user-1', description: 'necessidade' });
+
+    expect(logger.log).toHaveBeenCalledWith(
+      expect.stringContaining('geração concluída'),
+      expect.any(String),
+      expect.objectContaining({ operation: 'generation', correlationId: 'corr-123' }),
+    );
   });
 });
