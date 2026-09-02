@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { ZodError } from 'zod';
+import { ClsService } from 'nestjs-cls';
+import { CORRELATION_ID_KEY } from '../observability/observability.constants';
 
 interface ErrorResponse {
   statusCode: number;
@@ -15,11 +17,14 @@ interface ErrorResponse {
   error: string;
   timestamp: string;
   path: string;
+  correlationId?: string;
 }
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(GlobalExceptionFilter.name);
+
+  constructor(private readonly cls: ClsService) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
@@ -27,6 +32,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
 
     const { statusCode, message, error } = this.resolveError(exception);
+    const correlationId = this.readCorrelationId();
 
     const body: ErrorResponse = {
       statusCode,
@@ -36,7 +42,12 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       path: request.url,
     };
 
-    const logLine = `${request.method} ${request.url} → ${String(statusCode)}`;
+    if (correlationId) {
+      body.correlationId = correlationId;
+    }
+
+    const suffix = correlationId ? ` [correlationId=${correlationId}]` : '';
+    const logLine = `${request.method} ${request.url} → ${String(statusCode)}${suffix}`;
 
     if (statusCode >= 500) {
       this.logger.error(logLine, exception instanceof Error ? exception.stack : String(exception));
@@ -45,6 +56,15 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     }
 
     response.status(statusCode).json(body);
+  }
+
+  /** Lê o correlation id do CLS de forma segura; undefined fora de request. */
+  private readCorrelationId(): string | undefined {
+    if (!this.cls.isActive()) {
+      return undefined;
+    }
+    const value = this.cls.get<string | undefined>(CORRELATION_ID_KEY);
+    return typeof value === 'string' && value.length > 0 ? value : undefined;
   }
 
   private resolveError(exception: unknown): {

@@ -10,6 +10,7 @@ import { UsersModule } from './modules/users/users.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { JwtAuthGuard } from './modules/auth/infrastructure/jwt-auth.guard';
 import { buildThrottlerOptions } from './common/throttler/throttler.config';
+import { ObservabilityModule } from './common/observability/observability.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { buildThrottlerOptions } from './common/throttler/throttler.config';
       load: [appConfig],
       envFilePath: ['.env.local', '.env'],
     }),
+    ObservabilityModule,
     ThrottlerModule.forRootAsync({
       inject: [appConfig.KEY],
       useFactory: (config: ConfigType<typeof appConfig>) => buildThrottlerOptions(config),

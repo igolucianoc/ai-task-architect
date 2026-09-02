@@ -5,7 +5,7 @@ import { ConfigType } from '@nestjs/config';
 import helmet from 'helmet';
 import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
-import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { AppLogger } from './common/observability/app-logger';
 import { appConfig } from './config/app.config';
 
 async function bootstrap(): Promise<void> {
@@ -14,6 +14,9 @@ async function bootstrap(): Promise<void> {
     bufferLogs: true,
   });
 
+  // Substitui o logger padrão pelo logger estruturado (JSON + correlationId).
+  // Resolvido do container porque depende de injeção (ClsService).
+  app.useLogger(app.get(AppLogger));
   app.flushLogs();
 
   const config = app.get<ConfigType<typeof appConfig>>(appConfig.KEY);
@@ -21,7 +24,8 @@ async function bootstrap(): Promise<void> {
   app.setGlobalPrefix('api');
   app.use(helmet());
   app.use(cookieParser());
-  app.useGlobalFilters(new GlobalExceptionFilter());
+  // O GlobalExceptionFilter agora é registrado via APP_FILTER no
+  // ObservabilityModule para habilitar DI do ClsService.
 
   app.enableCors({
     origin: config.corsOrigin,
