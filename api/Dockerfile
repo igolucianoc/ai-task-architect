@@ -1,7 +1,9 @@
 # ── Estágio base ─────────────────────────────────────────────────────────────
 FROM node:24-alpine AS base
 WORKDIR /app
-RUN apk add --no-cache dumb-init
+# dumb-init: init mínimo para encaminhar sinais (SIGTERM/SIGINT) ao processo Node.
+# openssl: exigido pelo Prisma Client em runtime no Alpine (libssl).
+RUN apk add --no-cache dumb-init openssl
 
 # ── Dependências ──────────────────────────────────────────────────────────────
 FROM base AS deps
@@ -12,12 +14,16 @@ RUN npm ci
 
 # ── Desenvolvimento ───────────────────────────────────────────────────────────
 FROM base AS development
+ENV NODE_ENV=development
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Gera o Prisma Client com o binary engine correto para Alpine (musl).
 RUN npx prisma generate
+# Entrypoint aplica migrations + seed antes de iniciar (ver docker-entrypoint.sh).
+RUN chmod +x ./docker-entrypoint.sh
 EXPOSE 3000
-CMD ["dumb-init", "npx", "nest", "start", "--watch"]
+ENTRYPOINT ["dumb-init", "--", "./docker-entrypoint.sh"]
+CMD ["npx", "nest", "start", "--watch"]
 
 # ── Build ─────────────────────────────────────────────────────────────────────
 FROM base AS builder
@@ -31,12 +37,24 @@ RUN npm run build
 FROM base AS production
 ENV NODE_ENV=production
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
+# Dependências de runtime (sem devDependencies).
+COPY package*.json ./
+RUN npm ci --omit=dev
 
-# Remove dependências de desenvolvimento após o build
-RUN npm prune --omit=dev
+# Prisma Client gerado, artefatos compilados e recursos necessários ao boot.
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/dist ./dist
+COPY prisma ./prisma
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
+
+# Prisma CLI + tsx ficam disponíveis para migrations/seed no boot mesmo na
+# imagem de produção enxuta (o entrypoint os invoca via npm/npx).
+RUN npm install --no-save prisma@6 tsx@4 \
+  && chmod +x ./docker-entrypoint.sh \
+  && chown -R node:node /app
 
 EXPOSE 3000
 USER node
-CMD ["dumb-init", "node", "dist/main"]
+ENTRYPOINT ["dumb-init", "--", "./docker-entrypoint.sh"]
+CMD ["node", "dist/main"]

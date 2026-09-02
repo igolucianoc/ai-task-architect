@@ -73,7 +73,7 @@ Variáveis relevantes (`api/.env`):
 Sem um `HF_TOKEN` real (valor placeholder), a API usa um provider de LLM _fake_ que devolve uma
 especificação de exemplo — útil para rodar e demonstrar a aplicação offline, sem chamadas externas.
 
-## Executando com Docker
+## Executando com Docker (um comando)
 
 Sobe PostgreSQL, Redis, API e Web:
 
@@ -81,9 +81,43 @@ Sobe PostgreSQL, Redis, API e Web:
 docker compose up --build
 ```
 
+Isso é tudo. A ordem de inicialização é garantida por _healthchecks_ (a API só sobe
+depois que o Postgres e o Redis estão saudáveis; o Web só depois que a API está
+saudável), e no primeiro boot a API aplica as migrations e executa o seed de
+demonstração automaticamente — não há passo manual entre os containers.
+
 - API: http://localhost:3000/api
 - Web: http://localhost:5173
 - Health check: http://localhost:3000/api/health
+
+> Sem um `HF_TOKEN` real (o valor placeholder é o padrão), a API usa um provider de
+> LLM _fake_ que devolve uma especificação de exemplo. Assim a aplicação sobe e
+> funciona ponta a ponta sem nenhuma chamada externa.
+
+### Atalhos (Makefile)
+
+Há um `Makefile` com atalhos para o dia a dia (rode `make help` para a lista completa):
+
+```bash
+make up            # docker compose up --build
+make up-detached   # sobe em background
+make logs          # acompanha os logs
+make ps            # estado e healthchecks dos serviços
+make seed          # reexecuta o seed idempotente
+make check         # lint + typecheck + testes da API
+make down          # para os containers (mantém o banco)
+make down-clean    # para e APAGA os volumes (reset total do banco)
+```
+
+### Controle da inicialização do banco
+
+O boot da API aplica migrations e roda o seed por padrão. Para pular qualquer um
+deles, defina as variáveis no ambiente antes do `up` (ou no `.env` da raiz):
+
+| Variável | Padrão | Efeito quando `false` |
+|----------|--------|-----------------------|
+| `RUN_MIGRATIONS` | `true` | não aplica `prisma migrate deploy` no boot |
+| `RUN_DB_SEED` | `true` | não executa o seed de demonstração no boot |
 
 ## Executando localmente (sem Docker para a aplicação)
 
@@ -135,6 +169,35 @@ npm test          # testes unitários (Vitest)
 npm run typecheck # verificação de tipos
 npm run lint      # ESLint (TypeScript strict, sem any)
 ```
+
+## Troubleshooting
+
+**A API reinicia em loop / fica _unhealthy_.**
+Veja os logs com `docker compose logs -f api`. As causas mais comuns são migrations
+que falham (banco antigo com esquema incompatível) ou `JWT_SECRET` com menos de 32
+caracteres. Para um banco de desenvolvimento, `make down-clean` apaga os volumes e
+recomeça do zero.
+
+**Porta já em uso (`address already in use`).**
+Alguma das portas 3000, 5173, 5432 ou 6379 já está ocupada no host. Ajuste
+`API_PORT`, `WEB_PORT`, `POSTGRES_PORT` ou `REDIS_PORT` no `.env` da raiz e suba
+novamente.
+
+**`Cannot find module '@prisma/client'` ou erro de engine do Prisma.**
+O Prisma Client é gerado durante o build da imagem. Após alterar `schema.prisma`,
+reconstrua com `docker compose build api` (ou `make build`).
+
+**O seed não populou os dados.**
+O seed é idempotente e roda no boot. Reexecute manualmente com `make seed` (ou
+`docker compose exec api npm run db:seed`). Se estiver em imagem de produção enxuta
+e o seed for indisponível, o boot segue sem os dados de demonstração — isso é
+esperado e não derruba a API.
+
+**Migrations não aplicaram / quero pular o seed.**
+Controle pelas variáveis `RUN_MIGRATIONS` e `RUN_DB_SEED` (ver acima).
+
+**Mudei o `docker-compose.yml` ou os healthchecks e nada mudou.**
+Recrie os containers: `docker compose up --build --force-recreate`.
 
 ## Segurança
 

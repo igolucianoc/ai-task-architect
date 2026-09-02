@@ -1,0 +1,22 @@
+# Dependências e artefatos (reinstalados/gerados na imagem)
+node_modules
+dist
+coverage
+
+# Segredos — nunca devem entrar na imagem
+.env
+.env.local
+.env.*.local
+
+# Metadados de desenvolvimento
+.git
+.gitignore
+.idea
+.vscode
+*.log
+*.tsbuildinfo
+.eslintcache
+
+# Docker
+Dockerfile
+.dockerignore
