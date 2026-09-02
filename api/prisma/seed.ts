@@ -161,6 +161,9 @@ async function main(): Promise<void> {
       completionTokens: 540,
       totalTokens: 860,
       latencyMs: 11800,
+      // Valor de exemplo plausível para a demo (Etapa 09). Em produção o custo é
+      // calculado a partir das rates configuráveis; aqui usamos um literal fixo.
+      estimatedCost: new Prisma.Decimal('0.001290'),
       generationRunId: IDS.runs.completed,
     },
   });
@@ -176,6 +179,8 @@ async function main(): Promise<void> {
       completionTokens: 180,
       totalTokens: 790,
       latencyMs: 4200,
+      // Valor de exemplo plausível para a demo (Etapa 09), coerente com o uso acima.
+      estimatedCost: new Prisma.Decimal('0.001185'),
       evaluationId: IDS.evaluations.completed,
     },
   });

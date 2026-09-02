@@ -16,6 +16,10 @@ const envSchema = z.object({
   HF_MODEL: z.string().min(1).default('HuggingFaceH4/zephyr-7b-beta'),
   // Modelo dedicado à avaliação (Etapa 07); se ausente, usa o mesmo de geração.
   HF_MODEL_EVALUATION: z.string().min(1).optional(),
+  // Custo estimado de LLM (Etapa 09): rates configuráveis por 1000 tokens.
+  // Default 0 = comportamento neutro (custo 0 quando não configurado).
+  LLM_COST_PER_1K_PROMPT_TOKENS: z.coerce.number().nonnegative().default(0),
+  LLM_COST_PER_1K_COMPLETION_TOKENS: z.coerce.number().nonnegative().default(0),
 });
 
 export type AppConfig = z.infer<typeof envSchema> & {
@@ -30,6 +34,8 @@ export type AppConfig = z.infer<typeof envSchema> & {
   hfToken: string;
   hfModel: string;
   hfModelEvaluation: string;
+  llmCostPer1kPromptTokens: number;
+  llmCostPer1kCompletionTokens: number;
 };
 
 export const appConfig = registerAs('app', (): AppConfig => {
@@ -55,5 +61,7 @@ export const appConfig = registerAs('app', (): AppConfig => {
     hfToken: env.HF_TOKEN,
     hfModel: env.HF_MODEL,
     hfModelEvaluation: env.HF_MODEL_EVALUATION ?? env.HF_MODEL,
+    llmCostPer1kPromptTokens: env.LLM_COST_PER_1K_PROMPT_TOKENS,
+    llmCostPer1kCompletionTokens: env.LLM_COST_PER_1K_COMPLETION_TOKENS,
   };
 });

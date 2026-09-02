@@ -168,6 +168,8 @@ model LlmUsage {
   completionTokens Int          @map("completion_tokens")
   totalTokens      Int          @map("total_tokens")
   latencyMs        Int          @map("latency_ms")
+  // Custo estimado (Etapa 09): precisão alta para custos pequenos por token.
+  estimatedCost    Decimal      @default(0) @db.Decimal(12, 6) @map("estimated_cost")
   createdAt        DateTime     @default(now()) @map("created_at")
 
   generationRunId String?            @map("generation_run_id") @db.Uuid

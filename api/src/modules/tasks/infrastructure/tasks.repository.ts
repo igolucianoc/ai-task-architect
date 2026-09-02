@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { ConfigType } from '@nestjs/config';
 import {
   Task,
   TaskGenerationRun,
@@ -10,9 +11,11 @@ import {
   Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { appConfig } from '../../../config/app.config';
 import { TaskSpecification, parseTaskSpecification } from '../application/task-specification';
 import { LlmUsageMetrics } from '../application/llm-provider.port';
 import { EvaluationOutcome } from '../application/task-evaluation';
+import { estimateLlmCost, type LlmCostRates } from '../application/llm-cost';
 
 /**
  * Dados necessários para avaliar uma task já concluída: a necessidade original
@@ -65,7 +68,25 @@ export interface SaveEvaluationUnavailableInput {
 
 @Injectable()
 export class TasksRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(appConfig.KEY)
+    private readonly config: ConfigType<typeof appConfig>,
+  ) {}
+
+  /**
+   * Calcula o custo estimado do uso de tokens como Decimal, a partir das rates
+   * configuradas (default 0 → custo neutro). Centraliza a conversão para os
+   * pontos que persistem LlmUsage (geração e avaliação).
+   */
+  private buildEstimatedCost(usage: LlmUsageMetrics): Prisma.Decimal {
+    const rates: LlmCostRates = {
+      pricePer1kPromptTokens: this.config.llmCostPer1kPromptTokens,
+      pricePer1kCompletionTokens: this.config.llmCostPer1kCompletionTokens,
+    };
+    const cost = estimateLlmCost(usage, rates);
+    return new Prisma.Decimal(cost.toFixed(6));
+  }
 
   /**
    * Cria a Task apenas com status PENDING, sem run associada. Usado no fluxo
@@ -150,6 +171,7 @@ export class TasksRepository {
             completionTokens: input.usage.completionTokens,
             totalTokens: input.usage.totalTokens,
             latencyMs: input.latencyMs,
+            estimatedCost: this.buildEstimatedCost(input.usage),
             generationRunId: input.runId,
           },
         });
@@ -232,6 +254,7 @@ export class TasksRepository {
             completionTokens: input.usage.completionTokens,
             totalTokens: input.usage.totalTokens,
             latencyMs: input.latencyMs,
+            estimatedCost: this.buildEstimatedCost(input.usage),
             evaluationId: evaluation.id,
           },
         });
